@@ -1,0 +1,37 @@
+@import "tailwindcss";
+.goog-te-combo {
+  background-color: black;
+  color: white;
+  padding: 6px;
+  border-radius: 8px;
+}
+.goog-logo-link {
+  display: none !important;
+}
+
+.goog-te-gadget {
+  color: transparent !important;
+}
+.goog-te-gadget {
+  display: none !important;
+}
+
+.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0px !important;
+}
+
+html, body {
+  margin-top: 0px !important;
+}
+
+/* Optional styling for dropdown */
+.goog-te-combo {
+  background-color: black;
+  color: white;
+  padding: 6px;
+  border-radius: 8px;
+}

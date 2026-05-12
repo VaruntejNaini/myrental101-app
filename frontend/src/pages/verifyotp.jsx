@@ -38,7 +38,7 @@ function VerifyOtp() {
   // SEND EMAIL OTP
   const sendEmailOtp = async () => {
     try {
-      const res = await API.post("/auth/send-email-otp", {
+      const res = await API.post("/auth/send-email-otp", { 
         email,
       });
 
@@ -57,6 +57,7 @@ function VerifyOtp() {
       const res = await API.post("/auth/verify-email-otp", {
         email,
         otp: emailOtp,
+        
       });
 
       setEmailVerified(true);
@@ -69,7 +70,6 @@ function VerifyOtp() {
       );
     }
   };
-
   // VERIFY MOBILE OTP
   const verifyMobileOtp = async () => {
     try {
@@ -219,6 +219,7 @@ function VerifyOtp() {
 
       </div>
     </div>
+    
   );
 }
 

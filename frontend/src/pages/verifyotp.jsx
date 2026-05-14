@@ -91,10 +91,10 @@ function VerifyOtp() {
 
   // FINAL CONTINUE
   const handleContinue = () => {
-    if (emailVerified && mobileVerified) {
+    if (emailVerified) {
       navigate("/");
     } else {
-      setMessage("Please verify both email and mobile");
+      setMessage("Please verify your email to continue");
     }
   };
 
@@ -109,7 +109,7 @@ function VerifyOtp() {
 
         {/* MOBILE SECTION */}
 
-        <div className="mb-8">
+        {/* <div className="mb-8">
 
           <label className="font-semibold text-gray-700">
             Mobile Number
@@ -152,7 +152,7 @@ function VerifyOtp() {
               Mobile Verified ✅
             </p>
           )}
-        </div>
+        </div> */}
 
         {/* EMAIL SECTION */}
 

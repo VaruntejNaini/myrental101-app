@@ -13,7 +13,6 @@ function VerifyOtp() {
   const [emailOtp, setEmailOtp] = useState("");
   // const [mobileOtp, setMobileOtp] = useState("");
 
-  const [emailVerified, setEmailVerified] = useState(false);
   // const [mobileVerified, setMobileVerified] = useState(false);
 
   const [message, setMessage] = useState("");
@@ -52,24 +51,37 @@ function VerifyOtp() {
   };
 
   // VERIFY EMAIL OTP
-  const verifyEmailOtp = async () => {
-    try {
-      const res = await API.post("/auth/verify-email-otp", {
+ const verifyEmailOtp = async () => {
+  try {
+
+    const res = await API.post(
+      "/auth/verify-email-otp",
+      {
         email,
         otp: emailOtp,
-        
-      });
+      }
+    );
 
-      setEmailVerified(true);
+    // success message
+    setMessage("");
 
-      setMessage(res.data.msg);
-
-    } catch (err) {
-      setMessage(
-        err.response?.data?.msg || "Invalid email OTP"
-      );
+    // OPTIONAL:
+    // save token if backend sends one
+    if (res.data.token) {
+      localStorage.setItem("token", res.data.token);
     }
-  };
+
+    // redirect instantly
+    navigate("/dashboard");
+
+  } catch (err) {
+
+    setMessage(
+      err.response?.data?.msg || "Invalid Email OTP"
+    );
+
+  }
+};
   // VERIFY MOBILE OTP
   // const verifyMobileOtp = async () => {
   //   try {
@@ -89,14 +101,7 @@ function VerifyOtp() {
   //   }
   // };
 
-  // FINAL CONTINUE
-  const handleContinue = () => {
-    if (emailVerified) {
-      navigate("/");
-    } else {
-      setMessage("Please verify your email to continue");
-    }
-  };
+  //
 
   return (
      <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{background:"#fdf6ee"}}>
@@ -155,70 +160,111 @@ function VerifyOtp() {
         </div> */}
 
         {/* EMAIL SECTION */}
+{/* EMAIL SECTION */}
 
-        <div>
+<div className="mt-6">
 
-          <label className="font-semibold text-gray-700">
-            Registered Email
-          </label>
+  <label className="block font-semibold text-gray-700 mb-2">
+    Registered Email
+  </label>
+{/* Email + Send OTP */}
+<div className="flex items-center gap-2 mt-2">
 
-          <div className="flex gap-2 mt-2">
-            <input
-              type="text"
-              value={email}
-              disabled
-              className="flex-1 border p-3 rounded-xl bg-gray-100"
-            />
+  <input
+    type="text"
+    value={email}
+    disabled
+    className="
+      w-[78%]
+      border
+      border-gray-300
+      px-4
+      py-2.5
+      rounded-xl
+      bg-gray-100
+      text-gray-700
+      text-sm
+      outline-none
+    "
+  />
 
-            <button
-              onClick={sendEmailOtp}
-              className="bg-indigo-500 text-white px-4 rounded-xl"
-            >
-              Send OTP
-            </button>
-          </div>
+  <button
+    onClick={sendEmailOtp}
+    className="
+      w-[22%]
+      bg-indigo-500
+      text-white
+      text-[11px]
+      font-medium
+      px-1
+      py-2
+      rounded-xl
+      transition-all
+      duration-200
+      hover:bg-indigo-600
+      hover:shadow-md
+      active:scale-95
+    "
+  >
+    Send OTP
+  </button>
 
-          <input
-            type="text"
-            placeholder="Enter email OTP"
-            className="w-full border p-3 rounded-xl mt-3"
-            value={emailOtp}
-            onChange={(e) => setEmailOtp(e.target.value)}
-          />
+</div>
 
-          <button
-            onClick={verifyEmailOtp}
-            className="w-full bg-green-500 text-white py-3 rounded-xl mt-3"
-          >
-            Verify Email OTP
-          </button>
+  {/* OTP Input */}
+  <input
+    type="text"
+    placeholder="Enter Email OTP"
+    className="
+      w-full
+      border
+      border-gray-300
+      p-3
+      rounded-xl
+      mt-4
+      outline-none
+      focus:ring-2
+      focus:ring-indigo-400
+      focus:border-indigo-400
+      transition-all
+    "
+    value={emailOtp}
+    onChange={(e) => setEmailOtp(e.target.value)}
+  />
 
-          {emailVerified && (
-            <p className="text-green-600 mt-2">
-              Email Verified ✅
-            </p>
-          )}
-        </div>
+  {/* Verify Button */}
+  <button
+    onClick={verifyEmailOtp}
+    className="
+      w-full
+      bg-green-500
+      text-white
+      py-3
+      rounded-xl
+      mt-4
+      font-semibold
+      transition-all
+      duration-200
+      hover:bg-green-600
+      hover:scale-[1.02]
+      hover:shadow-lg
+      active:scale-95
+    "
+  >
+    Verify Email OTP
+  </button>
+  {message && (
+  <p className="text-red-500 text-sm mt-3 text-center font-medium">
+    {message}
+  </p>
+)}
 
-        {/* MESSAGE */}
+ 
 
-        {message && (
-          <p className="text-center mt-5 text-sm text-gray-700">
-            {message}
-          </p>
-        )}
-
-        {/* CONTINUE BUTTON */}
-
-        <button
-          onClick={handleContinue}
-          className="w-full bg-black text-white py-3 rounded-xl mt-6"
-        >
-          Continue
-        </button>
-
+</div>
       </div>
     </div>
+    
     
   );
 }

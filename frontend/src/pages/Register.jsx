@@ -11,6 +11,7 @@ function Register() {
   });
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false); // Add this line
   const navigate = useNavigate();
 
   const validate = () => {
@@ -26,23 +27,22 @@ function Register() {
     return "";
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const err = validate();
-    if (err) return setError(err);
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  const err = validate();
+  if (err) return setError(err);
 
-   try {
-  const res = await API.post("/auth/register", form);
-
-  // save email for OTP verification page
-  localStorage.setItem("pendingEmail", form.email);
-
-  // redirect to verify otp page
-  navigate("/verifyotp");
-
-} catch (err) {
-  setError(err.response?.data?.msg || "Registration failed");
-}};
+  try {
+    setLoading(true); // Set to true when starting
+    await API.post("/auth/register", form);
+    localStorage.setItem("pendingEmail", form.email);
+    navigate("/verifyotp");
+  } catch (err) {
+    setError(err.response?.data?.msg || "Registration failed");
+  } finally {
+    setLoading(false); // Set to false when done
+  }
+};
 
   return (
   <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{background:"#fdf6ee"}}>
@@ -75,7 +75,7 @@ function Register() {
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Password"
-              className="w-full p-2 pr-10 rounded-lg bg-white/30 text-white placeholder-gray-200 focus:outline-none focus:ring-2 focus:ring-white"
+              className="w-full p-2 pr-10 rounded-lg bg-white/30 text-white placeholder-gray-200 focus:outline-none focus:ring-2 focus:ring-white "
               onChange={(e) =>
                 setForm({ ...form, password: e.target.value })
               }
@@ -93,14 +93,16 @@ function Register() {
             <p className="text-red-200 text-sm mb-2">{error}</p>
           )}
 
-          <button className="bg-white text-purple-600 py-2 rounded-lg">
-            Register
+         <button type="submit" disabled={loading} className="bg-white text-purple-600 font-semibold py-2 rounded-lg hover:bg-gray-200 transition transition cursor-pointer disabled:cursor-not-allowed">
+         {loading ? "Registering..." : "Register"}
           </button>
+                    {error && (
+          <p className="text-red-200 text-sm mb-2">{error}</p>)}
         </form>
 
         <p className="text-sm text-white mt-4 text-center">
           Already have an account?{" "}
-          <Link to="/Login" className="underline">
+          <Link to="/login" className="underline">
             Login
           </Link>
         </p>

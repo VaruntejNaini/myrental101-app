@@ -8,32 +8,32 @@ function VerifyOtp() {
 
   const email = localStorage.getItem("pendingEmail");
 
-  const [phone, setPhone] = useState("");
+  // const [phone, setPhone] = useState("");
 
   const [emailOtp, setEmailOtp] = useState("");
-  const [mobileOtp, setMobileOtp] = useState("");
+  // const [mobileOtp, setMobileOtp] = useState("");
 
   const [emailVerified, setEmailVerified] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
+  // const [mobileVerified, setMobileVerified] = useState(false);
 
   const [message, setMessage] = useState("");
 
   // SEND MOBILE OTP
-  const sendMobileOtp = async () => {
-    try {
-      const res = await API.post("/auth/send-mobile-otp", {
-        email,
-        phone,
-      });
-
-      setMessage(res.data.msg);
-
-    } catch (err) {
-      setMessage(
-        err.response?.data?.msg || "Failed to send mobile OTP"
-      );
-    }
-  };
+  // const sendMobileOtp = async () => {
+  //   try {
+  //     const res = await API.post("/auth/send-mobile-otp", {
+  //       email,
+  //       phone,
+  //     });
+  // 
+  //     setMessage(res.data.msg);
+  // 
+  //   } catch (err) {
+  //     setMessage(
+  //       err.response?.data?.msg || "Failed to send mobile OTP"
+  //     );
+  //   }
+  // };
 
   // SEND EMAIL OTP
   const sendEmailOtp = async () => {
@@ -71,23 +71,23 @@ function VerifyOtp() {
     }
   };
   // VERIFY MOBILE OTP
-  const verifyMobileOtp = async () => {
-    try {
-      const res = await API.post("/auth/verify-mobile-otp", {
-        email,
-        otp: mobileOtp,
-      });
-
-      setMobileVerified(true);
-
-      setMessage(res.data.msg);
-
-    } catch (err) {
-      setMessage(
-        err.response?.data?.msg || "Invalid mobile OTP"
-      );
-    }
-  };
+  // const verifyMobileOtp = async () => {
+  //   try {
+  //     const res = await API.post("/auth/verify-mobile-otp", {
+  //       email,
+  //       otp: mobileOtp,
+  //     });
+  // 
+  //     setMobileVerified(true);
+  // 
+  //     setMessage(res.data.msg);
+  // 
+  //   } catch (err) {
+  //     setMessage(
+  //       err.response?.data?.msg || "Invalid mobile OTP"
+  //     );
+  //   }
+  // };
 
   // FINAL CONTINUE
   const handleContinue = () => {

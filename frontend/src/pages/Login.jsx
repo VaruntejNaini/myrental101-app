@@ -1,4 +1,3 @@
-import Input from "../components/Input";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -103,7 +102,7 @@ function Login() {
   </button>
 </div>
 
-          <button type="submit" disabled={loading} className="bg-white text-purple-600 font-semibold py-2 rounded-lg hover:bg-gray-200 transition">
+          <button type="submit" disabled={loading} className="bg-white text-purple-600 font-semibold py-2 rounded-lg hover:bg-gray-200 transition cursor-pointer disabled:cursor-not-allowed">
          {loading ? "Logging in..." : "Login"}
           </button>
                     {error && (

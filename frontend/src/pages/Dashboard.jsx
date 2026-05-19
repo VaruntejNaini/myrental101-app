@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CityStreetScene } from "../components/CityStreetScene";
+import API from "../api"; // Adjust this path based on where your axios instance is
 
 // ── Cartoon SVG Characters ──────────────────────────────────────────────────
 const CartoonVerify = () => (
@@ -174,30 +175,45 @@ export default function Dashboard() {
   const [searchVal, setSearchVal] = useState("");
   const [priceFilter, setPriceFilter] = useState(500);
   const chatEndRef = useRef(null);
+  const navigate = useNavigate();
+
+const token = localStorage.getItem("token");
+const isLoggedIn = !!token;
+
+const handleLogout = () => {
+  localStorage.removeItem("token");
+  navigate("/dashboard");
+};
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const botReplies = [
-    "Great question! You can post your item in under 2 minutes — just upload photos, set your price, and go live! 🚀",
-    "All users are verified with a government ID for your safety. We take trust seriously! 🛡️",
-    "You can negotiate directly in the chat — propose a price, counter-offer, and seal the deal! 🤝",
-    "RentIt uses secure escrow payments so money is only released when the renter confirms receipt. 💰",
-    "You can browse items by category, location, or price range using our smart filters! 🔍",
-  ];
+const sendMessage = async () => {
+  if (!chatInput.trim()) return;
 
-  const sendMessage = async () => {
-    if (!chatInput.trim()) return;
-    const userMsg = { from: "user", text: chatInput };
-    setMessages(p => [...p, userMsg]);
-    setChatInput("");
-    setIsTyping(true);
-    await new Promise(r => setTimeout(r, 1200));
+  // 1. Add User Message to UI
+  const userMsg = { from: "user", text: chatInput };
+  setMessages(p => [...p, userMsg]);
+  setChatInput("");
+  setIsTyping(true);
+
+  try {
+    // 2. Call your Backend AI route
+    const response = await API.post("/ai/chat", {
+      message: chatInput,
+      context: "The user is currently on the main Dashboard. They are looking at rental products like cameras, scooters, and gaming consoles in Hyderabad."
+    });
+
+    // 3. Add AI Response to UI
+    setMessages(p => [...p, { from: "bot", text: response.data.reply }]);
+  } catch (err) {
+    console.error("Chat Error:", err);
+    setMessages(p => [...p, { from: "bot", text: "Sorry, I'm having trouble connecting to my brain right now! 🧠🔌" }]);
+  } finally {
     setIsTyping(false);
-    setMessages(p => [...p, { from: "bot", text: botReplies[Math.floor(Math.random() * botReplies.length)] }]);
-  };
-
+  }
+};
   const products = [
     { emoji: "📷", title: "Canon EOS R50 Camera", price: "450", rating: 5, owner: "Arjun K.", badge: "Hot 🔥" },
     { emoji: "🛺", title: "Auto Rickshaw (Half Day)", price: "300", rating: 4, owner: "Ravi M." },
@@ -290,15 +306,53 @@ export default function Dashboard() {
 
           {/* Right CTA */}
           <div className="flex items-center gap-3">
-            <Link to="/Login" className="hidden sm:block text-sm font-bold text-slate-600 hover:text-indigo-500 transition-colors">Log In</Link>
-            <Link to="/Register" className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm px-4 py-2 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200">
-              Register Free
-            </Link>
-            <button className="md:hidden text-slate-600" onClick={() => setMobileMenu(m => !m)}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-          </div>
-        </div>
+
+  {isLoggedIn ? (
+    <button
+      onClick={handleLogout}
+      className="bg-red-500 text-white text-sm px-4 py-2 rounded-xl font-bold shadow-md hover:bg-red-600 hover:scale-105 transition-all duration-200"
+    >
+      Logout
+    </button>
+  ) : (
+    <>
+      <Link
+        to="/login"
+        className="hidden sm:block text-sm font-bold text-slate-600 hover:text-indigo-500 transition-colors"
+      >
+        Log In
+      </Link>
+
+      <Link
+        to="/register"
+        className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm px-4 py-2 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+      >
+        Register Free
+      </Link>
+    </>
+  )}
+
+  <button
+    className="md:hidden text-slate-600"
+    onClick={() => setMobileMenu((m) => !m)}
+  >
+    <svg
+      className="w-6 h-6"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 6h16M4 12h16M4 18h16"
+      />
+    </svg>
+  </button>
+
+</div>
+</div>
 
         {/* Mobile menu */}
         {mobileMenu && (

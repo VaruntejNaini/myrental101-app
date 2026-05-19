@@ -336,8 +336,7 @@ router.post("/verify-email-otp", async (req, res) => {
     }
 
     // INVALID OTP
-
-    if (user.emailOtp !== otp) {
+      if (user.emailOtp !== otp) {
 
       return res.status(400).json({
         msg: "Invalid OTP",

@@ -16,6 +16,7 @@ function VerifyOtp() {
   // const [mobileVerified, setMobileVerified] = useState(false);
 
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState(""); // "success" or "error"
 
   // SEND MOBILE OTP
   // const sendMobileOtp = async () => {
@@ -42,11 +43,13 @@ function VerifyOtp() {
       });
 
       setMessage(res.data.msg);
+      setMessageType("success");
 
     } catch (err) {
       setMessage(
         err.response?.data?.msg || "Failed to send email OTP"
       );
+      setMessageType("error");
     }
   };
 
@@ -79,6 +82,7 @@ function VerifyOtp() {
     setMessage(
       err.response?.data?.msg || "Invalid Email OTP"
     );
+    setMessageType("error");
 
   }
 };
@@ -237,7 +241,7 @@ function VerifyOtp() {
     onClick={verifyEmailOtp}
     className="
       w-full
-      bg-green-500
+      bg-indigo-500
       text-white
       py-3
       rounded-xl
@@ -245,16 +249,15 @@ function VerifyOtp() {
       font-semibold
       transition-all
       duration-200
-      hover:bg-green-600
-      hover:scale-[1.02]
-      hover:shadow-lg
+      hover:bg-indigo-600
+      hover:shadow-md
       active:scale-95
     "
   >
     Verify Email OTP
   </button>
   {message && (
-  <p className="text-red-500 text-sm mt-3 text-center font-medium">
+  <p className={`text-sm mt-3 text-center font-medium ${messageType === "success" ? "text-green-500" : "text-red-500"}`}>
     {message}
   </p>
 )}
@@ -262,6 +265,7 @@ function VerifyOtp() {
  
 
 </div>
+        
       </div>
     </div>
     

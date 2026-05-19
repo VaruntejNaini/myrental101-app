@@ -355,9 +355,20 @@ router.post("/verify-email-otp", async (req, res) => {
 
     // RESPONSE
 
-    res.json({
-      msg: "Email verified successfully",
-    });
+   const token = jwt.sign(
+  {
+    id: user._id,
+  },
+  process.env.JWT_SECRET,
+  {
+    expiresIn: "1d",
+  }
+);
+
+res.json({
+  msg: "Email verified successfully",
+  token,
+});
 
   } catch (err) {
 

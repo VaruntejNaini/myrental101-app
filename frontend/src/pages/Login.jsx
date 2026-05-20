@@ -102,6 +102,14 @@ function Login() {
   </button>
 </div>
 
+          <div className="flex justify-end mb-4">
+            <span
+              onClick={() => navigate("/verifyotp", { state: { email: form.email, mode: "forgot" } })}
+              className="text-xs text-white underline cursor-pointer hover:text-gray-200 transition"
+            >
+              Forgot Password?
+            </span>
+         </div>
           <button type="submit" disabled={loading} className="bg-white text-purple-600 font-semibold py-2 rounded-lg hover:bg-gray-200 transition cursor-pointer disabled:cursor-not-allowed">
          {loading ? "Logging in..." : "Login"}
           </button>

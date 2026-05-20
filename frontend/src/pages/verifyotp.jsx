@@ -1,16 +1,19 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+
+import { useNavigate, useLocation } from "react-router-dom";
 import API from "../api";
 import { CityStreetScene } from "../components/CityStreetScene";
 
 function VerifyOtp() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const mode = location.state?.mode; // "forgot" or undefined
 
-  const email = localStorage.getItem("pendingEmail");
-
-  // const [phone, setPhone] = useState("");
-
+  const [email, setEmail] = useState(
+    location.state?.email || localStorage.getItem("pendingEmail") || ""
+  );
   const [emailOtp, setEmailOtp] = useState("");
+
   // const [mobileOtp, setMobileOtp] = useState("");
 
   // const [mobileVerified, setMobileVerified] = useState(false);
@@ -54,38 +57,32 @@ function VerifyOtp() {
   };
 
   // VERIFY EMAIL OTP
- const verifyEmailOtp = async () => {
-  try {
-
-    const res = await API.post(
-      "/auth/verify-email-otp",
-      {
-        email,
-        otp: emailOtp,
+  const verifyEmailOtp = async () => {
+    try {
+      if (mode === "forgot") {
+        await API.post("/auth/verify-reset-otp", {
+          email,
+          otp: emailOtp,
+        });
+        setMessage("");
+        navigate("/reset-password", { state: { email, otp: emailOtp } });
+      } else {
+        const res = await API.post("/auth/verify-email-otp", {
+          email,
+          otp: emailOtp,
+        });
+        setMessage("");
+        if (res.data.token) {
+          localStorage.setItem("token", res.data.token);
+        }
+        navigate("/dashboard");
       }
-    );
-
-    // success message
-    setMessage("");
-
-    // OPTIONAL:
-    // save token if backend sends one
-    if (res.data.token) {
-      localStorage.setItem("token", res.data.token);
+    } catch (err) {
+      setMessage(err.response?.data?.msg || "Invalid Email OTP");
+      setMessageType("error");
     }
+  };
 
-    // redirect instantly
-    navigate("/dashboard");
-
-  } catch (err) {
-
-    setMessage(
-      err.response?.data?.msg || "Invalid Email OTP"
-    );
-    setMessageType("error");
-
-  }
-};
   // VERIFY MOBILE OTP
   // const verifyMobileOtp = async () => {
   //   try {
@@ -175,22 +172,25 @@ function VerifyOtp() {
 <div className="flex items-center gap-2 mt-2">
 
   <input
-    type="text"
+    type="email"
     value={email}
-    disabled
-    className="
+    disabled={mode !== "forgot"}
+    onChange={(e) => setEmail(e.target.value)}
+    placeholder="Enter email address"
+    className={`
       w-[78%]
       border
       border-gray-300
       px-4
       py-2.5
       rounded-xl
-      bg-gray-100
-      text-gray-700
       text-sm
       outline-none
-    "
+      transition-all
+      ${mode === "forgot" ? "bg-white/20 text-white placeholder-gray-300 focus:ring-2 focus:ring-white border-white/35" : "bg-gray-100 text-gray-700"}
+    `}
   />
+  
 
   <button
     onClick={sendEmailOtp}

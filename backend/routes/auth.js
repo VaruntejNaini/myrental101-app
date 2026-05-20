@@ -379,7 +379,65 @@ res.json({
     });
   }
 });
+// =========================
+// VERIFY RESET OTP (FORGOT PASSWORD)
+// =========================
+router.post("/verify-reset-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ msg: "Email and OTP are required" });
+    }
 
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    if (!user.emailOtp || user.emailOtp !== otp) {
+      return res.status(400).json({ msg: "Invalid OTP" });
+    }
+
+    res.json({ msg: "OTP verified successfully" });
+  } catch (err) {
+    console.error("VERIFY RESET OTP ERROR:", err);
+    res.status(500).json({ msg: "Verification failed" });
+  }
+});
+
+// =========================
+// RESET PASSWORD
+// =========================
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ msg: "All fields are required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    // Verify OTP again for security before applying password change
+    if (!user.emailOtp || user.emailOtp !== otp) {
+      return res.status(400).json({ msg: "Invalid or expired OTP" });
+    }
+
+    // Hash and store the new password securely
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    user.emailOtp = ""; // Clear OTP
+    user.isEmailVerified = true; // Auto-verify email upon password recovery
+    await user.save();
+
+    res.json({ msg: "Password updated successfully" });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR:", err);
+    res.status(500).json({ msg: err.message });
+  }
+});
 
 // =========================
 // EXPORT

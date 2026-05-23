@@ -1,18 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { useNavigate, useLocation } from "react-router-dom";
 import API from "../api";
 import { CityStreetScene } from "../components/CityStreetScene";
+import { AUTH_MODES, STORAGE_KEYS, MESSAGE_TYPES, API_ROUTES } from "../constants/auth";
 
 function VerifyOtp() {
   const navigate = useNavigate();
   const location = useLocation();
-  const mode = location.state?.mode; // "forgot" or undefined
+  const mode = location.state?.mode; // AUTH_MODES.FORGOT or undefined
 
   const [email, setEmail] = useState(
-    location.state?.email || localStorage.getItem("pendingEmail") || ""
-  );
+  location.state?.email ?? localStorage.getItem(STORAGE_KEYS.PENDING_EMAIL) ?? ""
+);
   const [emailOtp, setEmailOtp] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [isSending, setIsSending] = useState(false);
+  
+
+  useEffect(() => {
+    let timer;
+    if (cooldown > 0) {
+      timer = setInterval(() => {
+        setCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
 
   // const [mobileOtp, setMobileOtp] = useState("");
 
@@ -40,46 +55,53 @@ function VerifyOtp() {
 
   // SEND EMAIL OTP
   const sendEmailOtp = async () => {
+    if (cooldown > 0 || isSending) return;
+    setIsSending(true);
+    setMessage("");
+
     try {
-      const res = await API.post("/auth/send-email-otp", { 
+      const res = await API.post(API_ROUTES.SEND_EMAIL_OTP, { 
         email,
       });
 
       setMessage(res.data.msg);
-      setMessageType("success");
+      setMessageType(MESSAGE_TYPES.SUCCESS);
+      setCooldown(60); // 60-second cooldown starts here
 
     } catch (err) {
       setMessage(
         err.response?.data?.msg || "Failed to send email OTP"
       );
-      setMessageType("error");
+      setMessageType(MESSAGE_TYPES.ERROR);
+    } finally {
+      setIsSending(false);
     }
   };
 
   // VERIFY EMAIL OTP
   const verifyEmailOtp = async () => {
     try {
-      if (mode === "forgot") {
-        await API.post("/auth/verify-reset-otp", {
+      if (mode === AUTH_MODES.FORGOT) {
+        await API.post(API_ROUTES.VERIFY_RESET_OTP, {
           email,
           otp: emailOtp,
         });
         setMessage("");
         navigate("/reset-password", { state: { email, otp: emailOtp } });
       } else {
-        const res = await API.post("/auth/verify-email-otp", {
+        const res = await API.post(API_ROUTES.VERIFY_EMAIL_OTP, {
           email,
           otp: emailOtp,
         });
         setMessage("");
         if (res.data.token) {
-          localStorage.setItem("token", res.data.token);
+          localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
         }
         navigate("/dashboard");
       }
     } catch (err) {
       setMessage(err.response?.data?.msg || "Invalid Email OTP");
-      setMessageType("error");
+      setMessageType(MESSAGE_TYPES.ERROR);
     }
   };
 
@@ -161,61 +183,35 @@ function VerifyOtp() {
         </div> */}
 
         {/* EMAIL SECTION */}
-{/* EMAIL SECTION */}
 
 <div className="mt-6">
 
   <label className="block font-semibold text-gray-700 mb-2">
     Registered Email
   </label>
-{/* Email + Send OTP */}
-<div className="flex items-center gap-2 mt-2">
 
   <input
     type="email"
     value={email}
-    disabled={mode !== "forgot"}
+    disabled={mode !== AUTH_MODES.FORGOT && !!email}
     onChange={(e) => setEmail(e.target.value)}
     placeholder="Enter email address"
     className={`
-      w-[78%]
+      w-full
       border
       border-gray-300
-      px-4
-      py-2.5
+      p-3
       rounded-xl
-      text-sm
+      mt-2
       outline-none
+      focus:ring-2
+      focus:ring-indigo-400
+      focus:border-indigo-400
       transition-all
-      ${mode === "forgot" ? "bg-white/20 text-white placeholder-gray-300 focus:ring-2 focus:ring-white border-white/35" : "bg-gray-100 text-gray-700"}
+      ${(mode !== AUTH_MODES.FORGOT && !!email) ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white text-gray-900"}
     `}
   />
-  
-
-  <button
-    onClick={sendEmailOtp}
-    className="
-      w-[22%]
-      bg-indigo-500
-      text-white
-      text-[11px]
-      font-medium
-      px-1
-      py-2
-      rounded-xl
-      transition-all
-      duration-200
-      hover:bg-indigo-600
-      hover:shadow-md
-      active:scale-95
-    "
-  >
-    Send OTP
-  </button>
-
-</div>
-
-  {/* OTP Input */}
+   {/* OTP Input */}
   <input
     type="text"
     placeholder="Enter Email OTP"
@@ -235,6 +231,30 @@ function VerifyOtp() {
     value={emailOtp}
     onChange={(e) => setEmailOtp(e.target.value)}
   />
+ {/* Send OTP Button */}
+  <button
+    onClick={sendEmailOtp}
+    disabled={cooldown > 0 || isSending}
+    className="
+      w-full
+      bg-indigo-500
+      text-white
+      py-3
+      rounded-xl
+      mt-4
+      font-semibold
+      transition-all
+      duration-200
+      disabled:bg-gray-400
+      disabled:text-gray-200
+      disabled:cursor-not-allowed
+      hover:bg-indigo-600
+      hover:shadow-md
+      active:scale-95
+    "
+  >
+    {isSending ? "Sending..." : cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Send OTP"}
+  </button>
 
   {/* Verify Button */}
   <button
@@ -257,7 +277,7 @@ function VerifyOtp() {
     Verify Email OTP
   </button>
   {message && (
-  <p className={`text-sm mt-3 text-center font-medium ${messageType === "success" ? "text-green-500" : "text-red-500"}`}>
+  <p className={`text-sm mt-3 text-center font-medium ${messageType === MESSAGE_TYPES.SUCCESS ? "text-green-500" : "text-red-500"}`}>
     {message}
   </p>
 )}

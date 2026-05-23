@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import API from "../api";
 import { CityStreetScene } from "../components/CityStreetScene";
+import { API_ROUTES } from "../constants/auth";
 
 function ResetPassword() {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ function ResetPassword() {
       setLoading(true);
       setError("");
 
-      const res = await API.post("/auth/reset-password", {
+      const res = await API.post(API_ROUTES.RESET_PASSWORD, {
         email,
         otp,
         newPassword: password,

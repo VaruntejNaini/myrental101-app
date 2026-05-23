@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "../api";
 import { CityStreetScene } from "../components/CityStreetScene";
+import { STORAGE_KEYS, API_ROUTES, REGEX_PATTERNS } from "../constants/auth";
 
 function Register() {
   const [form, setForm] = useState({
@@ -18,7 +19,7 @@ function Register() {
     if (!form.name || !form.email || !form.password) {
       return "All fields required";
     }
-    if (!/\S+@\S+\.\S+/.test(form.email)) {
+    if (!REGEX_PATTERNS.EMAIL.test(form.email)) {
       return "Invalid email";
     }
     if (form.password.length < 6) {
@@ -34,8 +35,8 @@ function Register() {
 
   try {
     setLoading(true); // Set to true when starting
-    await API.post("/auth/register", form);
-    localStorage.setItem("pendingEmail", form.email);
+    await API.post(API_ROUTES.REGISTER, form);
+    localStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, form.email);
     navigate("/verifyotp");
   } catch (err) {
     setError(err.response?.data?.msg || "Registration failed");
@@ -46,7 +47,7 @@ function Register() {
 
   return (
   <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{background:"#fdf6ee"}}>
-        <CityStreetScene /> 
+        <CityStreetScene />
         <div className="relative z-10 bg-white/10 backdrop-blur-2xl p-8 rounded-3xl w-80 border border-white/35"
   style={{boxShadow:"0 8px 32px rgba(99,102,241,0.2), 0 1.5px 0 rgba(255,255,255,0.5) inset"}}>
 

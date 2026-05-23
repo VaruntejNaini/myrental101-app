@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CityStreetScene } from "../components/CityStreetScene";
 import API from "../api"; // Adjust this path based on where your axios instance is
+import { STORAGE_KEYS } from "../constants/auth";
 
 // ── Cartoon SVG Characters ──────────────────────────────────────────────────
 const CartoonVerify = () => (
@@ -177,11 +178,11 @@ export default function Dashboard() {
   const chatEndRef = useRef(null);
   const navigate = useNavigate();
 
-const token = localStorage.getItem("token");
+const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
 const isLoggedIn = !!token;
 
 const handleLogout = () => {
-  localStorage.removeItem("token");
+  localStorage.removeItem(STORAGE_KEYS.TOKEN);
   navigate("/dashboard");
 };
 

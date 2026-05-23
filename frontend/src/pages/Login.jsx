@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "../api";
 import { CityStreetScene } from "../components/CityStreetScene";
-
+import { AUTH_MODES, STORAGE_KEYS, API_ROUTES, REGEX_PATTERNS } from "../constants/auth";
 
 function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -33,7 +33,7 @@ function Login() {
     if (!form.email || !form.password) {
       return "All fields are required";
     }
-    if (!/\S+@\S+\.\S+/.test(form.email)) {
+    if (!REGEX_PATTERNS.EMAIL.test(form.email)) {
       return "Invalid email format";
     }
     if (form.password.length < 6) {
@@ -41,7 +41,21 @@ function Login() {
     }
     return "";
   };
- const handleSubmit = async (e) => {
+
+  const handleForgotPassword = () => {
+    if (!form.email) {
+      setError("Please fill in your email address to recover your password.");
+      return;
+    }
+    if (!REGEX_PATTERNS.EMAIL.test(form.email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    setError("");
+    navigate("/verifyotp", { state: { email: form.email, mode: AUTH_MODES.FORGOT } });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const err = validate();
     if (err) return setError(err);
@@ -50,9 +64,9 @@ function Login() {
       setLoading(true);
       setError("");
 
-      const res = await API.post("/auth/login", form);
+      const res = await API.post(API_ROUTES.LOGIN, form);
 
-      localStorage.setItem("token", res.data.token);
+      localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
       navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.msg || "Login failed");
@@ -104,18 +118,29 @@ function Login() {
 
           <div className="flex justify-end mb-4">
             <span
-              onClick={() => navigate("/verifyotp", { state: { email: form.email, mode: "forgot" } })}
+              onClick={handleForgotPassword}
               className="text-xs text-white underline cursor-pointer hover:text-gray-200 transition"
             >
               Forgot Password?
             </span>
-         </div>
+          </div>
           <button type="submit" disabled={loading} className="bg-white text-purple-600 font-semibold py-2 rounded-lg hover:bg-gray-200 transition cursor-pointer disabled:cursor-not-allowed">
          {loading ? "Logging in..." : "Login"}
           </button>
-                    {error && (
-  <p className="text-red-200 text-sm mb-2">{error}</p>
-)}
+          {error && (
+            <div className="mt-2 text-center">
+              <p className="text-red-200 text-sm mb-1">{error}</p>
+              {error.toLowerCase().includes("verify") && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/verifyotp", { state: { email: form.email } })}
+                  className="text-xs text-indigo-100 hover:text-white underline font-semibold transition cursor-pointer"
+                >
+                  Verify your account now ➔
+                </button>
+              )}
+            </div>
+          )}
         </form>
 
         <p className="text-sm text-white mt-4 text-center"> 

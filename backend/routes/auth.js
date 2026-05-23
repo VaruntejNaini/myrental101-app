@@ -2,10 +2,23 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
+import rateLimit from "express-rate-limit";
 
 import User from "../models/User.js";
 
 const router = express.Router();
+
+// Define rate limiter to enforce a 60-second cooldown per IP for OTP requests
+const otpRequestLimiter = rateLimit({
+  windowMs: 60 * 1000, // 60 seconds
+  max: 1, // Only 1 request allowed per window
+  message: {
+    msg: "Too many OTP requests. Please wait 60 seconds before trying again.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 
 
 // =========================
@@ -158,16 +171,12 @@ router.post("/login", async (req, res) => {
 // SEND EMAIL OTP
 // =========================
 
-router.post("/send-email-otp", async (req, res) => {
-
+router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
   try {
-
     const { email } = req.body;
 
     // FIND USER
-
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({
         msg: "User not found",
@@ -175,54 +184,37 @@ router.post("/send-email-otp", async (req, res) => {
     }
 
     // GENERATE OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log("EMAIL OTP (Sent to user):", otp);
 
-    const otp = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
-
-    console.log("EMAIL OTP:", otp);
-
-    // SAVE OTP
-
-    user.emailOtp = otp;
-
+    // HASH AND SAVE OTP
+    const hashedOtp = await bcrypt.hash(otp, 10);
+    user.emailOtp = hashedOtp;
     await user.save();
+    console.log("SUCCESSFULLY SAVED HASHED EMAIL OTP TO MONGODB:", user.emailOtp);
 
-    // SEND EMAIL
-
+    // SEND EMAIL with raw plain-text OTP
     await transporter.sendMail({
-
       from: process.env.EMAIL_USER,
-
       to: email,
-
       subject: "Your Verification OTP",
-
       html: `
         <div style="font-family:sans-serif">
-
           <h2>Email Verification</h2>
-
           <p>Your OTP is:</p>
-
           <h1>${otp}</h1>
-
           <p>Please enter this OTP to verify your account.</p>
-
         </div>
       `,
     });
 
     // RESPONSE
-
     res.json({
       msg: "Email OTP sent successfully",
     });
 
   } catch (err) {
-
     console.error("SEND OTP ERROR:", err.message || err);
-
     res.status(500).json({
       msg: "Failed to send OTP",
       error: err.message || "Unknown error",
@@ -246,7 +238,6 @@ router.post("/send-mobile-otp", async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({
         msg: "User not found",
@@ -254,13 +245,13 @@ router.post("/send-mobile-otp", async (req, res) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log("MOBILE OTP (Sent to user):", otp);
 
-    console.log("MOBILE OTP:", otp);
-
+    const hashedOtp = await bcrypt.hash(otp, 10);
     user.phone = phone;
-    user.mobileOtp = otp;
-
+    user.mobileOtp = hashedOtp;
     await user.save();
+    console.log("SUCCESSFULLY SAVED HASHED MOBILE OTP TO MONGODB:", user.mobileOtp);
 
     res.json({
       msg: "Mobile OTP sent successfully",
@@ -284,14 +275,14 @@ router.post("/verify-mobile-otp", async (req, res) => {
     const { email, otp } = req.body;
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({
         msg: "User not found",
       });
     }
 
-    if (user.mobileOtp !== otp) {
+    const isMatch = user.mobileOtp ? await bcrypt.compare(otp, user.mobileOtp) : false;
+    if (!isMatch) {
       return res.status(400).json({
         msg: "Invalid mobile OTP",
       });
@@ -299,7 +290,6 @@ router.post("/verify-mobile-otp", async (req, res) => {
 
     user.isMobileVerified = true;
     user.mobileOtp = "";
-
     await user.save();
 
     res.json({
@@ -320,65 +310,55 @@ router.post("/verify-mobile-otp", async (req, res) => {
 // =========================
 
 router.post("/verify-email-otp", async (req, res) => {
-
   try {
-
     const { email, otp } = req.body;
 
     // FIND USER
-
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({
         msg: "User not found",
       });
     }
 
-    // INVALID OTP
-      if (user.emailOtp !== otp) {
-
+    // INVALID OTP using cryptographic comparison
+    const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
+    if (!isMatch) {
       return res.status(400).json({
         msg: "Invalid OTP",
       });
     }
 
     // SUCCESS
-
     user.isEmailVerified = true;
-
-    // CLEAR OTP
-
     user.emailOtp = "";
-
     await user.save();
 
     // RESPONSE
+    const token = jwt.sign(
+      {
+        id: user._id,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
 
-   const token = jwt.sign(
-  {
-    id: user._id,
-  },
-  process.env.JWT_SECRET,
-  {
-    expiresIn: "1d",
-  }
-);
-
-res.json({
-  msg: "Email verified successfully",
-  token,
-});
+    res.json({
+      msg: "Email verified successfully",
+      token,
+    });
 
   } catch (err) {
-
     console.log("VERIFY OTP ERROR:", err);
-
     res.status(500).json({
       msg: "Verification failed",
     });
   }
 });
+
+
 // =========================
 // VERIFY RESET OTP (FORGOT PASSWORD)
 // =========================
@@ -394,7 +374,8 @@ router.post("/verify-reset-otp", async (req, res) => {
       return res.status(404).json({ msg: "User not found" });
     }
 
-    if (!user.emailOtp || user.emailOtp !== otp) {
+    const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
+    if (!isMatch) {
       return res.status(400).json({ msg: "Invalid OTP" });
     }
 
@@ -421,7 +402,8 @@ router.post("/reset-password", async (req, res) => {
     }
 
     // Verify OTP again for security before applying password change
-    if (!user.emailOtp || user.emailOtp !== otp) {
+    const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
+    if (!isMatch) {
       return res.status(400).json({ msg: "Invalid or expired OTP" });
     }
 

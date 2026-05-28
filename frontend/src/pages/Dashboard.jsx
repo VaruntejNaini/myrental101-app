@@ -179,6 +179,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   // Dynamic States
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [isNight, setIsNight] = useState(() => localStorage.getItem("theme") === "night");
   const [itemsCount, setItemsCount] = useState(0);
   const [usersCount, setUsersCount] = useState(0);
@@ -358,11 +360,184 @@ export default function Dashboard() {
         }
       `}</style>
 
+      {/* ── CHATGPT-STYLE SIDE PANEL ── */}
+      {/* Overlay Backdrop */}
+      {sidePanelOpen && (
+        <div 
+          onClick={() => { setSidePanelOpen(false); setProfileMenuOpen(false); }}
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 animate-fade-in"
+        ></div>
+      )}
+
+      {/* Side Panel Container */}
+      <div 
+        className={`fixed top-0 left-0 h-full w-[300px] z-50 bg-slate-950 border-r border-slate-900 shadow-[24px_0_48px_rgba(0,0,0,0.8)] flex flex-col justify-between transition-transform duration-300 ease-in-out ${sidePanelOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        {/* Top Header & Navigation */}
+        <div className="p-4 flex flex-col gap-4 overflow-y-auto flex-grow">
+          {/* Header row */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-900">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-black text-lg">R</div>
+              <span className="text-white font-black text-lg" style={{ fontFamily: "'Playfair Display', serif" }}>
+                RentIt <span className="text-xs text-indigo-400 font-semibold px-2 py-0.5 rounded-full bg-indigo-950/50 border border-indigo-900/50">v2.5</span>
+              </span>
+            </div>
+            <button 
+              onClick={() => { setSidePanelOpen(false); setProfileMenuOpen(false); }}
+              className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer text-xs"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* "+ New Request" ChatGPT action button style */}
+          <button 
+            onClick={() => { setSidePanelOpen(false); scrollToSection("browse-section"); handlePostItemClick({ preventDefault: () => {} }); }}
+            className="w-full py-3 px-4 rounded-xl border border-dashed border-indigo-500/30 hover:border-indigo-500 hover:bg-indigo-500/10 text-white font-bold text-sm tracking-wide transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 group hover:scale-[1.02]"
+          >
+            <span>➕</span> Post New Request
+          </button>
+
+          {/* Nav Items */}
+          <div className="flex flex-col gap-1.5 mt-2">
+            <button 
+              onClick={() => { setSidePanelOpen(false); scrollToSection("browse-section"); }}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="text-lg group-hover:scale-110 transition-transform">🔍</span> Browse Listings
+            </button>
+            
+            <button 
+              onClick={() => { setSidePanelOpen(false); scrollToSection("how-it-works"); }}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="text-lg group-hover:scale-110 transition-transform">ℹ️</span> How It Works
+            </button>
+
+            <button 
+              onClick={() => { setSidePanelOpen(false); scrollToSection("categories"); }}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="text-lg group-hover:scale-110 transition-transform">📂</span> Categories
+            </button>
+
+            <div className="h-px bg-slate-900 my-2"></div>
+
+            <h3 className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Activities</h3>
+
+            <button 
+              onClick={() => { setSidePanelOpen(false); }}
+              className="w-full flex items-center justify-between py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="flex items-center gap-3">
+                <span className="text-lg group-hover:scale-110 transition-transform">💬</span> Messages
+              </span>
+              <span className="bg-indigo-500/10 text-indigo-400 text-xs font-black px-2 py-0.5 rounded-full border border-indigo-500/20">3</span>
+            </button>
+
+            <button 
+              onClick={() => { setSidePanelOpen(false); }}
+              className="w-full flex items-center justify-between py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="flex items-center gap-3">
+                <span className="text-lg group-hover:scale-110 transition-transform">📦</span> Track Active Orders
+              </span>
+              <span className="bg-amber-500/10 text-amber-400 text-xs font-black px-2 py-0.5 rounded-full border border-amber-500/20">2</span>
+            </button>
+
+            <button 
+              onClick={() => { setSidePanelOpen(false); }}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="text-lg group-hover:scale-110 transition-transform">📍</span> Saved Locations
+            </button>
+
+            <button 
+              onClick={() => { setSidePanelOpen(false); }}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-left text-slate-300 hover:text-white hover:bg-slate-900/80 transition-all font-semibold text-sm cursor-pointer group"
+            >
+              <span className="text-lg group-hover:scale-110 transition-transform">🛒</span> Rental Cart
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Profile Box (ChatGPT style anchored card) */}
+        <div className="p-4 border-t border-slate-900 bg-slate-950/80 backdrop-blur-md relative">
+          
+          {/* Bottom Floating Submenu Popup (renders when profile box is clicked) */}
+          {profileMenuOpen && (
+            <div className="absolute bottom-[80px] left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-[0_-12px_36px_rgba(0,0,0,0.6)] flex flex-col gap-1 z-55">
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                👤 My Profile
+              </button>
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                📍 Your Addresses
+              </button>
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                📦 Your Orders
+              </button>
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                🛍️ Your Requests
+              </button>
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                ⚙️ Settings
+              </button>
+              <div className="h-px bg-slate-800 my-1"></div>
+              <button 
+                onClick={() => { setProfileMenuOpen(false); setSidePanelOpen(false); handleLogout(); }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs font-bold transition-all text-left cursor-pointer"
+              >
+                🚪 Log Out
+              </button>
+            </div>
+          )}
+
+          {/* Active User Card Trigger */}
+          <div 
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/60 hover:bg-slate-900 border border-slate-900 hover:border-slate-800 transition-all duration-200 cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-extrabold text-sm shadow-md group-hover:scale-105 transition-transform">
+                VT
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white text-xs font-black tracking-wide leading-tight group-hover:text-indigo-400 transition-colors">Varun Tej</span>
+                <span className="text-slate-500 text-[10px] font-bold tracking-wider leading-none mt-0.5 uppercase">Pro Renter ⭐</span>
+              </div>
+            </div>
+            <div className="text-slate-500 group-hover:text-white text-xs transition-colors">
+              ⚙️
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── NAVBAR ── */}
       <nav className={`sticky top-0 z-50 backdrop-blur-md border-b shadow-sm transition-colors duration-500 ${isNight ? "bg-slate-950/90 border-slate-900" : "bg-white/90 border-slate-100"}`}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <div 
+            onClick={() => setSidePanelOpen(!sidePanelOpen)} 
+            className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform duration-150 hover:opacity-90"
+            title="Toggle Navigation Panel"
+          >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-black text-xl shadow-md">R</div>
             <span className={`text-xl font-black transition-colors ${isNight ? "text-white" : "text-slate-800"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               Rent<span className="text-indigo-500">It</span>

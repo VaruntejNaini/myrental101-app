@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
+import { OAuth2Client } from "google-auth-library";
 
 import User from "../models/User.js";
 
@@ -418,6 +419,60 @@ router.post("/reset-password", async (req, res) => {
   } catch (err) {
     console.error("RESET PASSWORD ERROR:", err);
     res.status(500).json({ msg: err.message });
+  }
+});
+
+// =========================
+// GOOGLE AUTHENTICATION
+// =========================
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+router.post("/google", async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ msg: "Credential token is required" });
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Auto-register new Google user with secure random password
+      const randomPassword = Math.random().toString(36).substring(2, 10);
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      user = await User.create({
+        name: name || email.split("@")[0],
+        email,
+        password: hashedPassword,
+        isEmailVerified: true, // Pre-verified by Google
+      });
+      console.log("GOOGLE SIGNUP SUCCESS:", user.email);
+    } else {
+      console.log("GOOGLE LOGIN SUCCESS:", user.email);
+    }
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      token,
+      user,
+    });
+  } catch (err) {
+    console.error("GOOGLE LOGIN ERROR:", err);
+    res.status(500).json({ msg: "Google authentication failed" });
   }
 });
 

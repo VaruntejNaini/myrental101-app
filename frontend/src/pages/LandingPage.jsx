@@ -736,7 +736,7 @@ export default function Dashboard() {
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item.id)}
                 onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate("/rent-catalog")}
+                onCardClick={() => navigate(`/product/${item.id}`)}
               />
             ))}
           </div>
@@ -760,7 +760,7 @@ export default function Dashboard() {
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item.id)}
                 onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => setSidePanelOpen(true)}
+                onCardClick={() => navigate("/orders")}
               />
             ))}
           </div>
@@ -784,7 +784,7 @@ export default function Dashboard() {
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item.id)}
                 onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate("/second-hand-catalog")}
+                onCardClick={() => navigate(`/product/${item.id}`)}
               />
             ))}
           </div>
@@ -808,7 +808,7 @@ export default function Dashboard() {
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item.id)}
                 onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate("/requested-catalog")}
+                onCardClick={() => navigate(`/product/${item.id}`)}
               />
             ))}
           </div>

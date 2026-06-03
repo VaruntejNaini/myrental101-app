@@ -496,179 +496,15 @@ export default function Dashboard() {
         @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
       `}</style>
 
-      {/* ── RECONSTRUCTED PROFILE PANEL SIDEBAR ── */}
-      {sidePanelOpen && (
-        <>
-          {/* Strict overlay lock backdrop */}
-          <div 
-            onClick={() => setSidePanelOpen(false)}
-            className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm transition-opacity duration-300"
-          />
 
-          {/* Premium Panel Content */}
-          <div className="fixed top-0 right-0 h-full w-[340px] z-[105] bg-slate-950 border-l border-slate-900 shadow-[24px_0_48px_rgba(0,0,0,0.8)] flex flex-col justify-between p-6 overflow-y-auto text-white">
-            
-            {/* Header Area */}
-            <div>
-              <div className="flex items-center justify-between pb-4 border-b border-slate-900 mb-6">
-                <span className="font-black text-base flex items-center gap-2">
-                  👤 Renter Profile Panel
-                </span>
-                <button 
-                  onClick={() => setSidePanelOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 1. DP Upload/Aspect Crop box + Flair Badges */}
-              <div className="flex flex-col items-center gap-4 bg-slate-900/40 border border-slate-900 p-4 rounded-3xl mb-6">
-                <div 
-                  onClick={() => setShowChoiceModal(true)}
-                  className="relative group/avatar cursor-pointer"
-                >
-                  <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-extrabold text-2xl shadow-xl overflow-hidden border-2 border-indigo-500/30">
-                    {profilePic ? (
-                      <img src={profilePic} alt="Varun Tej" className="w-full h-full object-cover" />
-                    ) : (
-                      "VT"
-                    )}
-                  </div>
-                  <div className="absolute inset-0 bg-slate-950/65 rounded-3xl opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all duration-200">
-                    <span className="text-sm">📷</span>
-                    <span className="text-[9px] font-black uppercase mt-1">Upload DP</span>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-1.5">
-                    <h3 className="font-extrabold text-sm text-indigo-400">Varun Tej</h3>
-                    <span className="text-[10px] bg-indigo-500/15 text-indigo-400 font-bold px-2 py-0.5 rounded-lg border border-indigo-500/20">
-                      [Newbie] Flair Badge
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-bold">
-                    Reputation Score: <span className="text-emerald-400 font-black">98 / 100 Trust</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Active Rental Tracker Timeline */}
-              <div className="mb-6 bg-slate-900/40 border border-slate-900 p-4 rounded-3xl">
-                <h4 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2">
-                  📥 Active Rentals Period
-                </h4>
-                <div className="space-y-5">
-                  {activeRentals.map(rent => (
-                    <div key={rent.id} className="space-y-2">
-                      <div className="flex justify-between text-[9px] font-extrabold text-slate-300">
-                        <span>{rent.title}</span>
-                        <span className="text-indigo-400">{rent.rate}</span>
-                      </div>
-                      
-                      {/* Timeline dot bar */}
-                      <div className="relative w-full h-1 bg-slate-800 rounded-full my-4 flex items-center">
-                        <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full" style={{ width: `${rent.progress}%` }}></div>
-                        <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"></div>
-                        
-                        {/* Current Dot timeline with initiate Return popup */}
-                        <div 
-                          className="absolute w-3.5 h-3.5 rounded-full bg-indigo-500 border-2 border-white -translate-x-1/2 cursor-pointer group/dot flex items-center justify-center transition-all hover:scale-125"
-                          style={{ left: `${rent.progress}%` }}
-                        >
-                          <button 
-                            onClick={() => triggerToast(`Return request initiated for: ${rent.title}`)}
-                            className="absolute bottom-5 opacity-0 group-hover/dot:opacity-100 transition-opacity bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-40"
-                          >
-                            Initiate Return
-                          </button>
-                        </div>
-
-                        {/* End dot Extend/Shrink popups */}
-                        <div className="absolute right-0 w-2.5 h-2.5 rounded-full bg-slate-500 translate-x-1/2 cursor-pointer group/end flex items-center justify-center transition-all hover:bg-violet-500">
-                          <div className="absolute bottom-5 opacity-0 group-hover/end:opacity-100 transition-opacity bg-violet-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-40 flex gap-2">
-                            <button onClick={() => triggerToast("Extension requested!")} className="hover:underline">Extend</button>
-                            <span>|</span>
-                            <button onClick={() => triggerToast("Shrinkage requested!")} className="hover:underline">Shrink</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3. Active Borrow Requests */}
-              <div className="mb-6 bg-slate-900/40 border border-slate-900 p-4 rounded-3xl">
-                <h4 className="text-xs font-black uppercase text-indigo-400 mb-3">
-                  🛍️ Active Borrow Requests
-                </h4>
-                <div className="space-y-2 text-[11px] font-semibold text-slate-350">
-                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
-                    <span>⛺ Camping Tent 2 days</span>
-                    <span className="text-amber-400">Negotiating</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>🎸 Fender Stratocaster</span>
-                    <span className="text-emerald-400">Accepted Deal</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Order History timelines */}
-              <div className="mb-6 bg-slate-900/40 border border-slate-900 p-4 rounded-3xl">
-                <h4 className="text-xs font-black uppercase text-indigo-400 mb-3">
-                  🚚 Order History (Lending)
-                </h4>
-                <div className="space-y-2 text-[11px] text-slate-350">
-                  <div>
-                    <span className="font-extrabold block text-slate-200">MacBook Pro 14"</span>
-                    <span className="text-[9px] text-slate-500">Leased to Priya S. • 15 May - 02 June</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Link to Saved Page */}
-              <button 
-                onClick={() => { setSidePanelOpen(false); navigate("/saved"); }}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                🔖 Open Bookmarked Saved Page
-              </button>
-            </div>
-
-            {/* Logout button */}
-            <div className="border-t border-slate-900 pt-4 mt-6">
-              {isLoggedIn ? (
-                <button 
-                  onClick={handleLogout}
-                  className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 rounded-xl text-xs font-extrabold transition-all cursor-pointer"
-                >
-                  Log Out
-                </button>
-              ) : (
-                <button 
-                  onClick={() => { setSidePanelOpen(false); navigate("/login"); }}
-                  className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer"
-                >
-                  Log In
-                </button>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* ── NAVBAR ── */}
       <nav className={`sticky top-0 z-[45] backdrop-blur-md border-b shadow-sm transition-colors duration-500 ${isNight ? "bg-slate-950/90 border-slate-900" : "bg-white/90 border-slate-100"}`}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           
-          {/* Logo with Sidebar Trigger */}
+          {/* Logo */}
           <div 
-            onClick={() => setSidePanelOpen(!sidePanelOpen)} 
-            className="flex items-center gap-2 cursor-pointer active:scale-95 transition-transform duration-150 hover:opacity-90"
-            title="Toggle Navigation Profile Panel"
+            className="flex items-center gap-2"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-black text-xl shadow-md">R</div>
             <span className={`text-xl font-black transition-colors ${isNight ? "text-white" : "text-slate-800"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
@@ -755,7 +591,7 @@ export default function Dashboard() {
                         <span>👤</span> My Profile
                       </button>
                       <button
-                        onClick={() => { setProfileDropdownOpen(false); setSidePanelOpen(true); }}
+                        onClick={() => { setProfileDropdownOpen(false); navigate("/orders"); }}
                         className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-black transition-colors flex items-center gap-2 ${
                           isNight ? "hover:bg-slate-800 text-slate-200 hover:text-indigo-400" : "hover:bg-indigo-50 text-slate-700 hover:text-indigo-650"
                         }`}
@@ -819,8 +655,8 @@ export default function Dashboard() {
               <button onClick={() => navigate("/rent-catalog")} className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-8 py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 active:scale-95 cursor-pointer">
                 🚀 Start Renting
               </button>
-              <button onClick={() => setSidePanelOpen(true)} className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black text-lg shadow-md hover:shadow-xl border-2 border-indigo-200 hover:border-indigo-400 hover:scale-105 transition-all duration-200 cursor-pointer">
-                👤 My Sidebar Panel
+              <button onClick={() => navigate("/orders")} className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black text-lg shadow-md hover:shadow-xl border-2 border-indigo-200 hover:border-indigo-400 hover:scale-105 transition-all duration-200 cursor-pointer">
+                📦 My Orders
               </button>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -912,8 +748,8 @@ export default function Dashboard() {
             <h2 className="text-2xl font-black tracking-tight dark:text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
               📦 Items You Are Listing
             </h2>
-            <button onClick={() => setSidePanelOpen(true)} className="text-xs font-black text-indigo-500 hover:underline">
-              Manage in Sidebar
+            <button onClick={() => navigate("/orders")} className="text-xs font-black text-indigo-500 hover:underline">
+              Manage Orders
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">

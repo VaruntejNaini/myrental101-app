@@ -9,6 +9,7 @@ import SavedPage from "./pages/SavedPage";
 import RentCatalogPage from "./pages/RentCatalogPage";
 import SecondHandCatalogPage from "./pages/SecondHandCatalogPage";
 import RequestedCatalogPage from "./pages/RequestedCatalogPage";
+import MyOrders from "./pages/MyOrders";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/saved" element={<SavedPage />} />
+        <Route path="/orders" element={<MyOrders />} />
         <Route path="/rent-catalog" element={<RentCatalogPage />} />
         <Route path="/second-hand-catalog" element={<SecondHandCatalogPage />} />
         <Route path="/requested-catalog" element={<RequestedCatalogPage />} />

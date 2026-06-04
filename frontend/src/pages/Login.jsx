@@ -12,6 +12,7 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const [canRenderGoogle, setCanRenderGoogle] = useState(false);
 
   // Dynamic States
   const [isNight, setIsNight] = useState(() => localStorage.getItem("theme") === "night");
@@ -101,6 +102,12 @@ function Login() {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCanRenderGoogle(true);
+    }, 50); // A tiny 50ms delay is all it takes to clear the storm
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: isNight ? "#09090b" : "#fdf6ee", transition: "background 0.5s ease" }}>
@@ -164,7 +171,7 @@ function Login() {
               Forgot Password?
             </span>
           </div>
-          <button type="submit" disabled={loading} className="bg-white text-indigo-650 font-bold py-3 rounded-xl hover:bg-gray-105 active:scale-95 transition cursor-pointer disabled:cursor-not-allowed shadow-md">
+          <button type="submit" disabled={loading} className="bg-white text-indigo-700 font-bold py-3 rounded-xl hover:bg-gray-100 active:scale-95 transition cursor-pointer disabled:cursor-not-allowed shadow-md">
             {loading ? "Logging in..." : "Login"}
           </button>
           {error && (
@@ -191,14 +198,20 @@ function Login() {
           </div>
           
           <div className="w-full flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError("Google Sign-In failed. Please try again.")}
-              shape="pill"
-              theme="filled_blue"
-              size="large"
-              text="continue_with"
-            />
+         {/* ✅ MODIFY THIS BLOCK: Wrap the GoogleLogin component in a conditional check */}
+      {canRenderGoogle ? (
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => setError("Google Sign-In failed. Please try again.")}
+          shape="pill"
+          theme="filled_blue"
+          size="large"
+          text="continue_with"
+        />
+      ) : (
+        // A clean, matching placeholder block so your layout doesn't jump
+        <div className="h-[44px] w-[240px] bg-white/20 animate-pulse rounded-full" />
+      )}
           </div>
         </div>
 

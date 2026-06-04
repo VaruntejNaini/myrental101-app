@@ -5,6 +5,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 
 import authRoutes from "./routes/auth.js";
+import addressRoutes from "./routes/addresses.js";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -62,6 +63,9 @@ app.get("/", (req, res) => {
 
 // Auth Routes
 app.use("/api/auth", authRoutes);
+
+// Address Routes
+app.use("/api/addresses", addressRoutes);
 
 // ✅ AI Chat Route
 

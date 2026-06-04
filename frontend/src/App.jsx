@@ -11,6 +11,7 @@ import SecondHandCatalogPage from "./pages/SecondHandCatalogPage";
 import RequestedCatalogPage from "./pages/RequestedCatalogPage";
 import MyOrders from "./pages/MyOrders";
 import ProductDetailPage from "./pages/ProductDetailPage";
+import AddressManagement from "./pages/AddressManagement";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         <Route path="/saved" element={<SavedPage />} />
         <Route path="/orders" element={<MyOrders />} />
         <Route path="/product/:id" element={<ProductDetailPage />} />
+        <Route path="/addresses" element={<AddressManagement />} />
         <Route path="/rent-catalog" element={<RentCatalogPage />} />
         <Route path="/second-hand-catalog" element={<SecondHandCatalogPage />} />
         <Route path="/requested-catalog" element={<RequestedCatalogPage />} />

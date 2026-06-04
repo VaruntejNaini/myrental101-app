@@ -223,10 +223,38 @@ export default function Dashboard() {
 
   // Address Panel
   const [addressModalOpen, setAddressModalOpen] = useState(false);
-  const [savedAddress, setSavedAddress] = useState(() => localStorage.getItem("saved_delivery_address") || "Mahabubabad 506101");
+  const [savedAddress, setSavedAddress] = useState(() => localStorage.getItem("saved_delivery_address") || "Add Address");
   const [pincodeInput, setPincodeInput] = useState("");
   const [isDetecting, setIsDetecting] = useState(false);
   const [pincodeError, setPincodeError] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      API.get("/addresses")
+        .then(response => {
+          const defaultAddr = response.data.find(a => a.isDefault);
+          if (defaultAddr) {
+            const formatted = `${defaultAddr.firstName} ${defaultAddr.lastName} - ${defaultAddr.fullAddress}`;
+            setSavedAddress(formatted);
+            localStorage.setItem("saved_delivery_address", formatted);
+          } else if (response.data.length > 0) {
+            const formatted = `${response.data[0].firstName} ${response.data[0].lastName} - ${response.data[0].fullAddress}`;
+            setSavedAddress(formatted);
+            localStorage.setItem("saved_delivery_address", formatted);
+          } else {
+            setSavedAddress("Add Address");
+            localStorage.setItem("saved_delivery_address", "Add Address");
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load address for navbar sync:", err);
+        });
+    } else {
+      setSavedAddress("Add Address");
+      localStorage.setItem("saved_delivery_address", "Add Address");
+    }
+  }, []);
 
   // Notification / Toast popup
   const [showNotification, setShowNotification] = useState("");
@@ -514,11 +542,7 @@ export default function Dashboard() {
 
           {/* Amazon-style Address Panel */}
           <button
-            onClick={() => {
-              setPincodeError("");
-              setPincodeInput("");
-              setAddressModalOpen(true);
-            }}
+            onClick={() => navigate("/addresses")}
             className={`flex items-center gap-2 py-1.5 px-3 rounded-xl border transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 text-left focus:outline-none ${
               isNight 
                 ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-850" 
@@ -838,53 +862,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* 📍 PREMIUM PINCODE SELECTOR MODAL */}
-      {addressModalOpen && (
-        <div 
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in" 
-          onClick={() => setAddressModalOpen(false)}
-        >
-          <div 
-            className={`relative w-full max-w-sm rounded-3xl p-6 shadow-2xl border transition-all duration-300 ${
-              isNight ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-200 text-slate-800"
-            }`} 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setAddressModalOpen(false)}
-              className={`absolute top-4 right-4 p-1.5 rounded-xl transition-colors cursor-pointer ${
-                isNight ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-100 text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              ✕
-            </button>
-            <h3 className="font-black text-lg mb-2 flex items-center gap-2">
-              <span>📍</span> Choose your location
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <input 
-                  type="text" 
-                  maxLength={6}
-                  placeholder="e.g. 506101" 
-                  className={`w-full px-4 py-3 rounded-2xl border text-sm font-extrabold focus:outline-none transition ${
-                    isNight ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                  }`}
-                  value={pincodeInput}
-                  onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && handleApplyPincode()}
-                />
-              </div>
-              <button 
-                onClick={() => handleApplyPincode()}
-                className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-2xl text-xs font-black shadow-md uppercase tracking-wider cursor-pointer"
-              >
-                Check Availability
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Choice Modal Options Menu for Display Picture */}
       {showChoiceModal && (

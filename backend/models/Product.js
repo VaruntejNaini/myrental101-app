@@ -1,0 +1,39 @@
+import mongoose from "mongoose";
+
+const productSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true, trim: true, index: true },
+    description: { type: String, required: true },
+    category: { type: String, required: true, index: true },
+    images: [
+      {
+        url: { type: String, required: true },
+        publicId: { type: String, default: null }
+      }
+    ],
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    rentalPrice: { type: Number, required: true },
+    securityDeposit: { type: Number, required: true },
+    city: { type: String, required: true, index: true },
+    area: { type: String, required: true, index: true },
+    productType: { type: String, enum: ["RENT", "SECOND_HAND"], required: true },
+    status: {
+      type: String,
+      enum: ["ACTIVE", "AUCTION_ACTIVE", "RESERVED", "INACTIVE"],
+      default: "ACTIVE",
+      index: true,
+    },
+    currentBid: { type: Number, default: 0 },
+    auctionEndTime: { type: Date, index: true },
+    location: {
+      type: { type: String, default: "Point" },
+      coordinates: { type: [Number], default: [78.4867, 17.385] }, // [longitude, latitude], defaults to Hyd
+    },
+  },
+  { timestamps: true }
+);
+
+productSchema.index({ location: "2dsphere" });
+
+const Product = mongoose.model("Product", productSchema);
+export default Product;

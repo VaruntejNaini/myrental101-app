@@ -1,45 +1,87 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../api";
+
+const getImageUrl = (image) => {
+  if (!image) return "";
+  if (typeof image === "string") return image;
+  return image.url || "";
+};
 
 export default function RentCatalogPage() {
   const navigate = useNavigate();
   const [isNight] = useState(() => localStorage.getItem("theme") === "night");
 
-  // Mock rental products
-  const initialProducts = [
-    { id: "rent_camera_1", title: "Canon EOS R50 Camera", emoji: "📷", price: 450, category: "Electronics", owner: "Arjun K.", distance: "1.2 km away", rating: 5 },
-    { id: "rent_activa_2", title: "Honda Activa Scooter", emoji: "🛵", price: 250, category: "Vehicles", owner: "Rahul P.", distance: "2.5 km away", rating: 4 },
-    { id: "rent_ps5_3", title: "PlayStation 5 Pro Console", emoji: "🎮", price: 350, category: "Electronics", owner: "Aman G.", distance: "3.1 km away", rating: 5 },
-    { id: "rent_drill_4", title: "DeWalt Power Drill Set", emoji: "🔧", price: 120, category: "Tools", owner: "Suresh B.", distance: "0.8 km away", rating: 4 },
-    { id: "rent_tent_5", title: "2-Person Camping Tent", emoji: "⛺", price: 150, category: "Outdoor", owner: "Meera N.", distance: "1.9 km away", rating: 5 },
-    { id: "rent_mac_6", title: "MacBook Pro 14\" M3 Max", emoji: "💻", price: 800, category: "Electronics", owner: "Priya S.", distance: "2.2 km away", rating: 5 },
-    { id: "rent_guitar_7", title: "Fender Stratocaster Guitar", emoji: "🎸", price: 200, category: "Music", owner: "Kiran T.", distance: "3.5 km away", rating: 4 },
-    { id: "rent_projector_8", title: "Epson 4K Home Projector", emoji: "📽️", price: 500, category: "Electronics", owner: "Anish R.", distance: "2.7 km away", rating: 5 }
-  ];
-
-  // Filters State
+  const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [maxPrice, setMaxPrice] = useState(1000);
   const [maxDistance, setMaxDistance] = useState(5);
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
   const [notification, setNotification] = useState("");
+  const [postModalOpen, setPostModalOpen] = useState(false);
 
-  // Load bookmarks on mount
+  const [userCoords, setUserCoords] = useState(null);
+  const [coordsLoading, setCoordsLoading] = useState(true);
+  const [coordsError, setCoordsError] = useState("");
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(1);
+  };
+
+  const syncProducts = () => {
+    API.get("/rent/products?productType=RENT")
+      .then(res => setProducts(res.data))
+      .catch(err => console.error("Error fetching RentCatalogPage products:", err));
+  };
+
+  // Load products & bookmarks on mount
   useEffect(() => {
+    syncProducts();
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserCoords({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+          setCoordsLoading(false);
+        },
+        (error) => {
+          console.error("Error getting geolocation:", error);
+          setCoordsError("Distance unavailable. Enable location access to view distance.");
+          setCoordsLoading(false);
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      setCoordsError("Distance unavailable. Geolocation is not supported by this browser.");
+      setCoordsLoading(false);
+    }
+
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
     setBookmarkedIds(existing.map(x => x.id));
   }, []);
 
   const handleBookmarkToggle = (item) => {
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    if (bookmarkedIds.includes(item.id)) {
-      const updated = existing.filter(x => x.id !== item.id);
+    if (bookmarkedIds.includes(item._id)) {
+      const updated = existing.filter(x => x.id !== item._id);
       localStorage.setItem("bookmarked_items", JSON.stringify(updated));
       setBookmarkedIds(updated.map(x => x.id));
       triggerToast(`Removed "${item.title}" from saved bookmarks!`);
     } else {
-      const newItem = { ...item, rowType: "Items for Rent" };
+      const newItem = { ...item, id: item._id, rowType: "Items for Rent" };
       existing.push(newItem);
       localStorage.setItem("bookmarked_items", JSON.stringify(existing));
       setBookmarkedIds(existing.map(x => x.id));
@@ -53,14 +95,23 @@ export default function RentCatalogPage() {
   };
 
   // Filter logic
-  const filteredProducts = initialProducts.filter(p => {
+  const filteredProducts = products.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
-    const matchesPrice = p.price <= maxPrice;
+    const matchesPrice = p.rentalPrice <= maxPrice;
     
-    // Parse distance number from string
-    const distNum = parseFloat(p.distance);
-    const matchesDistance = isNaN(distNum) || distNum <= maxDistance;
+    let matchesDistance = true;
+    if (userCoords && p.location?.coordinates) {
+      const distance = calculateDistance(
+        userCoords.latitude,
+        userCoords.longitude,
+        p.location.coordinates[1],
+        p.location.coordinates[0]
+      );
+      if (distance) {
+        matchesDistance = parseFloat(distance) <= maxDistance;
+      }
+    }
 
     return matchesSearch && matchesCategory && matchesPrice && matchesDistance;
   });
@@ -70,14 +121,22 @@ export default function RentCatalogPage() {
       
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-6 flex justify-between items-center flex-wrap gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
-        <button 
-          onClick={() => navigate("/dashboard")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
-            isNight ? "bg-slate-900 border border-slate-850 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"
-          }`}
-        >
-          ← Back to Discovery
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => navigate("/dashboard")}
+            className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+              isNight ? "bg-slate-900 border border-slate-850 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"
+            }`}
+          >
+            ← Back to Discovery
+          </button>
+          <button 
+            onClick={() => setPostModalOpen(true)}
+            className="bg-indigo-500 hover:bg-indigo-650 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-colors shadow shadow-indigo-500/20 cursor-pointer"
+          >
+            + List a Rental
+          </button>
+        </div>
         <div>
           <h1 className="text-xl md:text-3xl font-black text-right">🛒 Peer-to-Peer Rental Hub</h1>
           <p className="text-[10px] text-slate-400 text-right mt-0.5">Explore high-quality shared equipment near you</p>
@@ -95,18 +154,20 @@ export default function RentCatalogPage() {
             <h3 className="font-extrabold text-sm border-b pb-3 mb-4 uppercase tracking-wider text-indigo-400">Filters</h3>
             
             {/* Search Input */}
-            <div className="mb-5">
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Keyword Search</label>
-              <input 
-                type="text" 
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search cameras, scooters..."
-                className={`w-full px-3 py-2 text-xs rounded-xl border border-slate-350 focus:outline-none focus:border-indigo-500 transition-colors ${
-                  isNight ? "bg-slate-950 border-slate-800 text-white placeholder-slate-500" : "bg-slate-50 border-slate-200 text-slate-800"
-                }`}
-              />
-            </div>
+             <div className="mb-5">
+             <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+              Keyword Search
+           </label>
+          <input 
+    type="text" 
+    value={search} // This will now work perfectly
+    onChange={e => setSearch(e.target.value)} // This will now work perfectly
+    placeholder="Search cameras, scooters..."
+    className={`w-full px-3 py-2 text-xs rounded-xl border border-slate-350 focus:outline-none focus:border-indigo-500 transition-colors ${
+      isNight ? "bg-slate-950 border-slate-800 text-white placeholder-slate-500" : "bg-slate-50 border-slate-200 text-slate-800"
+    }`}
+  />
+       </div>
 
             {/* Category Select */}
             <div className="mb-5">
@@ -131,13 +192,13 @@ export default function RentCatalogPage() {
             {/* Price Slider */}
             <div className="mb-5">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black uppercase text-slate-400">Max Rental Price</label>
+                <label className="text-xs font-black uppercase text-slate-450">Max Rental Price</label>
                 <span className="text-xs font-bold text-violet-500">₹{maxPrice}/day</span>
               </div>
               <input 
                 type="range" 
                 min={100} 
-                max={1000} 
+                max={10000} 
                 step={50}
                 value={maxPrice}
                 onChange={e => setMaxPrice(+e.target.value)}
@@ -163,7 +224,7 @@ export default function RentCatalogPage() {
             </div>
             
             <button 
-              onClick={() => { setSearch(""); setSelectedCategory("All"); setMaxPrice(1000); setMaxDistance(5); }}
+              onClick={() => { setSearch(""); setSelectedCategory("All"); setMaxPrice(10000); setMaxDistance(5); }}
               className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold py-2.5 rounded-xl uppercase tracking-wider text-slate-600 dark:text-slate-300 transition-colors"
             >
               Reset All Filters
@@ -183,34 +244,73 @@ export default function RentCatalogPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.map(p => (
                 <div 
-                  key={p.id} 
-                  onClick={() => navigate(`/rent/item/${p.id}`)}
+                  key={p._id} 
+                  onClick={() => navigate(`/product/${p._id}`)}
                   className={`group relative rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border p-4 cursor-pointer ${
-                    isNight ? "bg-slate-900/60 border-slate-850 text-white" : "bg-white border-slate-200 text-slate-800"
+                    isNight ? "bg-slate-900/60 border-slate-850 text-white" : "bg-white border-slate-205 text-slate-800"
                   }`}
                 >
                   {/* Bookmark Button */}
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleBookmarkToggle(p); }}
                     className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow transition-all cursor-pointer ${
-                      bookmarkedIds.includes(p.id) ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
+                      bookmarkedIds.includes(p._id) ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
                     }`}
                   >
                     🔖
                   </button>
 
-                  <div className="h-32 flex items-center justify-center text-5xl mb-4 group-hover:scale-105 transition-transform">
-                    {p.emoji}
+                  <div className="h-32 w-full flex items-center justify-center text-5xl mb-4 group-hover:scale-105 transition-transform overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-950">
+                    {p.images && p.images.length > 0 ? (
+                      <img src={getImageUrl(p.images[0])} alt={p.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>
+                        {p.title === "Canon EOS R50 Camera" ? "📷" : p.title === "Honda Activa Scooter" ? "🛵" : p.title === "PlayStation 5 Console" ? "🎮" : "🔧"}
+                      </span>
+                    )}
                   </div>
 
-                  <div>
-                    <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">{p.category}</span>
-                    <h4 className="font-extrabold text-sm truncate mt-2">{p.title}</h4>
-                    <p className="text-[10px] text-slate-400 mt-1">👤 {p.owner} • 📍 {p.distance}</p>
+                  <div className="p-4 flex flex-col gap-1.5">
+                    <h4 className="font-extrabold text-sm truncate">{p.title}</h4>
+                    
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-violet-500 font-black text-sm">₹{p.rentalPrice}</span>
+                      <span className="text-[10px] text-slate-400 font-normal">/day</span>
+                    </div>
 
-                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 dark:border-slate-850">
-                      <span className="text-violet-500 font-black text-sm">₹{p.price}<span className="text-[10px] text-slate-400 font-normal">/day</span></span>
-                      <button className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors">Rent</button>
+                    {p.securityDeposit !== undefined && p.securityDeposit > 0 && (
+                      <p className="text-[10px] text-slate-455 font-bold">
+                        🛡️ Security Deposit: <span className="text-indigo-400">₹{p.securityDeposit}</span>
+                      </p>
+                    )}
+
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                      <span>👤</span> {p.owner?.name || "Owner"}
+                    </p>
+
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                      <span>📍</span> {p.area || "Local"}
+                    </p>
+
+                    <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">Proximity</span>
+                        {coordsLoading ? (
+                          <span className="text-[10px] text-indigo-400 font-bold animate-pulse">Calculating distance...</span>
+                        ) : coordsError ? (
+                          <span className="text-[9px] text-amber-500 font-bold" title={coordsError}>Distance unavailable ⚠️</span>
+                        ) : (
+                          <span className="text-xs text-indigo-400 font-black bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/25">
+                            ⚡ {calculateDistance(
+                              userCoords?.latitude,
+                              userCoords?.longitude,
+                              p.location?.coordinates?.[1],
+                              p.location?.coordinates?.[0]
+                            )} km away
+                          </span>
+                        )}
+                      </div>
+                      <button className="bg-indigo-500 hover:bg-indigo-650 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors">Rent</button>
                     </div>
                   </div>
                 </div>
@@ -227,6 +327,17 @@ export default function RentCatalogPage() {
           <span>{notification}</span>
         </div>
       )}
+      {/* Post Product Modal */}
+      <PostProductModal 
+        isOpen={postModalOpen} 
+        onClose={() => setPostModalOpen(false)} 
+        isNight={isNight} 
+        onProductCreated={() => {
+          syncProducts();
+          triggerToast("Rental listing published successfully! 🚀");
+        }} 
+      />
+
     </div>
   );
 }

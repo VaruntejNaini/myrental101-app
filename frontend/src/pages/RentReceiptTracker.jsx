@@ -145,8 +145,8 @@ export default function RentReceiptTracker() {
               <div className="flex items-start gap-3">
                 <span className="text-emerald-500 font-extrabold">✓</span>
                 <div>
-                  <h4 className="font-bold text-xs">Verify Owner Identity</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Match the owner profile details and ID verification badge in person.</p>
+                  <h4 className="font-bold text-xs">Verify Owner Profile</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Match the owner profile details and chat history in person.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-3">

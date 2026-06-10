@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../api";
+import PostProductModal from "../components/PostProductModal";
+
+const getImageUrl = (image) => {
+  if (!image) return "";
+  if (typeof image === "string") return image;
+  return image.url || "";
+};
 
 export default function SecondHandCatalogPage() {
   const navigate = useNavigate();
   const [isNight] = useState(() => localStorage.getItem("theme") === "night");
 
-  // Mock second-hand products
-  const initialProducts = [
-    { id: "sale_drone_1", title: "DJI Mavic Air 2 Drone", emoji: "🚁", price: 45000, category: "Electronics", owner: "Ravi M.", distance: "4.2 km away", condition: "Like New" },
-    { id: "sale_bike_2", title: "Specialized Carbon Road Bike", emoji: "🚴", price: 78000, category: "Vehicles", owner: "Priya S.", distance: "1.8 km away", condition: "Excellent" },
-    { id: "sale_headphones_3", title: "Bose Noise Cancelling Headphones", emoji: "🎧", price: 14500, category: "Electronics", owner: "Kiran T.", distance: "2.1 km away", condition: "Good" },
-    { id: "sale_tent_4", title: "Quechua 4-Person Camping Tent", emoji: "⛺", price: 6500, category: "Outdoor", owner: "Meera N.", distance: "1.9 km away", condition: "Excellent" },
-    { id: "sale_keyboard_5", title: "Keychron K2 Mechanical Keyboard", emoji: "⌨️", price: 5500, category: "Electronics", owner: "Arjun K.", distance: "0.8 km away", condition: "Like New" },
-    { id: "sale_lens_6", title: "Sony 50mm f/1.8 Prime Lens", emoji: "🔍", price: 11000, category: "Electronics", owner: "Anish R.", distance: "3.5 km away", condition: "Good" }
-  ];
+  const [products, setProducts] = useState([]);
 
   // Filters State
   const [search, setSearch] = useState("");
@@ -21,22 +21,69 @@ export default function SecondHandCatalogPage() {
   const [maxPrice, setMaxPrice] = useState(100000);
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
   const [notification, setNotification] = useState("");
+  const [postModalOpen, setPostModalOpen] = useState(false);
 
-  // Load bookmarks on mount
+  const [userCoords, setUserCoords] = useState(null);
+  const [coordsLoading, setCoordsLoading] = useState(true);
+  const [coordsError, setCoordsError] = useState("");
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(1);
+  };
+
+  const syncProducts = () => {
+    API.get("/rent/products?productType=SECOND_HAND")
+      .then(res => setProducts(res.data))
+      .catch(err => console.error("Error fetching SecondHandCatalogPage products:", err));
+  };
+
+  // Load products & bookmarks on mount
   useEffect(() => {
+    syncProducts();
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserCoords({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+          setCoordsLoading(false);
+        },
+        (error) => {
+          console.error("Error getting geolocation:", error);
+          setCoordsError("Distance unavailable. Enable location access to view distance.");
+          setCoordsLoading(false);
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      setCoordsError("Distance unavailable. Geolocation is not supported by this browser.");
+      setCoordsLoading(false);
+    }
+
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
     setBookmarkedIds(existing.map(x => x.id));
   }, []);
 
   const handleBookmarkToggle = (item) => {
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    if (bookmarkedIds.includes(item.id)) {
-      const updated = existing.filter(x => x.id !== item.id);
+    if (bookmarkedIds.includes(item._id)) {
+      const updated = existing.filter(x => x.id !== item._id);
       localStorage.setItem("bookmarked_items", JSON.stringify(updated));
       setBookmarkedIds(updated.map(x => x.id));
       triggerToast(`Removed "${item.title}" from saved bookmarks!`);
     } else {
-      const newItem = { ...item, rowType: "Second-Hand", unit: "flat" };
+      const newItem = { ...item, id: item._id, rowType: "Second-Hand", unit: "flat" };
       existing.push(newItem);
       localStorage.setItem("bookmarked_items", JSON.stringify(existing));
       setBookmarkedIds(existing.map(x => x.id));
@@ -50,10 +97,10 @@ export default function SecondHandCatalogPage() {
   };
 
   // Filter logic
-  const filteredProducts = initialProducts.filter(p => {
+  const filteredProducts = products.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
-    const matchesCondition = selectedCondition === "All" || p.condition === selectedCondition;
-    const matchesPrice = p.price <= maxPrice;
+    const matchesCondition = selectedCondition === "All" || (p.condition || "Excellent") === selectedCondition;
+    const matchesPrice = p.rentalPrice <= maxPrice;
 
     return matchesSearch && matchesCondition && matchesPrice;
   });
@@ -63,14 +110,22 @@ export default function SecondHandCatalogPage() {
       
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-6 flex justify-between items-center flex-wrap gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
-        <button 
-          onClick={() => navigate("/dashboard")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
-            isNight ? "bg-slate-900 border border-slate-850 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"
-          }`}
-        >
-          ← Back to Discovery
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => navigate("/dashboard")}
+            className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+              isNight ? "bg-slate-900 border border-slate-850 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"
+            }`}
+          >
+            ← Back to Discovery
+          </button>
+          <button 
+            onClick={() => setPostModalOpen(true)}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-colors shadow shadow-emerald-500/20 cursor-pointer"
+          >
+            + Sell an Item
+          </button>
+        </div>
         <div>
           <h1 className="text-xl md:text-3xl font-black text-right">🤝 Second-Hand Purchase Hub</h1>
           <p className="text-[10px] text-slate-400 text-right mt-0.5">Direct peer-to-peer buyouts and verified conditions</p>
@@ -159,32 +214,65 @@ export default function SecondHandCatalogPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.map(p => (
                 <div 
-                  key={p.id} 
-                  className={`group relative rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border p-4 ${
-                    isNight ? "bg-slate-900/60 border-slate-850 text-white" : "bg-white border-slate-200 text-slate-800"
+                  key={p._id} 
+                  onClick={() => navigate(`/product/${p._id}`)}
+                  className={`group relative rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border p-4 cursor-pointer ${
+                    isNight ? "bg-slate-900/60 border-slate-850 text-white" : "bg-white border-slate-205 text-slate-800"
                   }`}
                 >
                   {/* Bookmark Button */}
                   <button 
-                    onClick={() => handleBookmarkToggle(p)}
+                    onClick={(e) => { e.stopPropagation(); handleBookmarkToggle(p); }}
                     className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow transition-all cursor-pointer ${
-                      bookmarkedIds.includes(p.id) ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
+                      bookmarkedIds.includes(p._id) ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
                     }`}
                   >
                     🔖
                   </button>
 
-                  <div className="h-32 flex items-center justify-center text-5xl mb-4 group-hover:scale-105 transition-transform">
-                    {p.emoji}
+                  <div className="h-32 w-full flex items-center justify-center text-5xl mb-4 group-hover:scale-105 transition-transform overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-950">
+                    {p.images && p.images.length > 0 ? (
+                      <img src={getImageUrl(p.images[0])} alt={p.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>
+                        {p.emoji || (p.title === "DJI Mavic Air 2 Drone" ? "🚁" : p.title === "Bose Noise Cancelling Headphones" ? "🎧" : "📦")}
+                      </span>
+                    )}
                   </div>
 
-                  <div>
-                    <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">{p.condition}</span>
-                    <h4 className="font-extrabold text-sm truncate mt-2">{p.title}</h4>
-                    <p className="text-[10px] text-slate-400 mt-1">👤 {p.owner} • 📍 {p.distance}</p>
+                  <div className="p-4 flex flex-col gap-1.5">
+                    <h4 className="font-extrabold text-sm truncate">{p.title}</h4>
+                    
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-violet-500 font-black text-sm">₹{p.rentalPrice.toLocaleString()}</span>
+                    </div>
 
-                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 dark:border-slate-850">
-                      <span className="text-violet-500 font-black text-sm">₹{p.price.toLocaleString()}</span>
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                      <span>👤</span> {p.owner?.name || "Owner"}
+                    </p>
+
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                      <span>📍</span> {p.area || "Local"}
+                    </p>
+
+                    <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">Proximity</span>
+                        {coordsLoading ? (
+                          <span className="text-[10px] text-indigo-400 font-bold animate-pulse">Calculating distance...</span>
+                        ) : coordsError ? (
+                          <span className="text-[9px] text-amber-500 font-bold" title={coordsError}>Distance unavailable ⚠️</span>
+                        ) : (
+                          <span className="text-xs text-indigo-400 font-black bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/25">
+                            ⚡ {calculateDistance(
+                              userCoords?.latitude,
+                              userCoords?.longitude,
+                              p.location?.coordinates?.[1],
+                              p.location?.coordinates?.[0]
+                            )} km away
+                          </span>
+                        )}
+                      </div>
                       <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors">Buy</button>
                     </div>
                   </div>
@@ -202,6 +290,17 @@ export default function SecondHandCatalogPage() {
           <span>{notification}</span>
         </div>
       )}
+
+      {/* Post Product Modal */}
+      <PostProductModal 
+        isOpen={postModalOpen} 
+        onClose={() => setPostModalOpen(false)} 
+        isNight={isNight} 
+        onProductCreated={() => {
+          syncProducts();
+          triggerToast("Sale listing published successfully! 🚀");
+        }} 
+      />
     </div>
   );
 }

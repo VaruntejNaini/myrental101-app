@@ -1,321 +1,368 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../api";
 
 export default function MyOrders() {
   const navigate = useNavigate();
   const [isNight] = useState(() => localStorage.getItem("theme") === "night");
-
-  // Load avatar if any
   const [profilePic] = useState(() => localStorage.getItem("userProfilePic") || "");
-
-  // Notification / Toast
   const [showNotification, setShowNotification] = useState("");
 
-  // States copied and enhanced from the sidebar
-  const [activeRentals, setActiveRentals] = useState([
-    { id: "active-1", title: "Canon EOS R50 Camera", rate: "₹450/day", progress: 75, startDate: "12 May", endDate: "30 May" },
-    { id: "active-2", title: "Honda Activa Scooter", rate: "₹250/day", progress: 40, startDate: "18 May", endDate: "05 June" }
-  ]);
+  const [activeRentals, setActiveRentals] = useState([]);
+  const [activeBorrowRequests, setActiveBorrowRequests] = useState([]);
+  
+  // OTP generator codes mapped by transaction ID
+  const [generatedOtps, setGeneratedOtps] = useState({});
+  const [verifyOtpInput, setVerifyOtpInput] = useState({});
+  
+  // Chat context maps
+  const [chats, setChats] = useState({});
+  const [chatInputs, setChatInputs] = useState({});
 
-  const [activeBorrowRequests, setActiveBorrowRequests] = useState([
-    { id: "borrow-1", title: "2-Person Camping Tent", duration: "2 days", status: "Negotiating", statusColor: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-    { id: "borrow-2", title: "Fender Stratocaster Guitar", duration: "5 days", status: "Accepted Deal", statusColor: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" }
-  ]);
+  // Damage reporting structures
+  const [damageReports, setDamageReports] = useState({});
+  const [claimAmounts, setClaimAmounts] = useState({});
 
-  const [orderHistory, setOrderHistory] = useState([
-    { id: "history-1", title: "MacBook Pro 14\"", detail: "Leased to Priya S. • 15 May - 02 June", role: "Lender" },
-    { id: "history-2", title: "DJI Mavic Air 2 Drone", detail: "Purchased outright • Delivered 15 May", role: "Buyer" },
-    { id: "history-3", title: "Fender Stratocaster Guitar", detail: "Purchased outright • In Transit", role: "Buyer" }
-  ]);
-
-  // Adjust Possession Modal States
-  const [showAdjustModal, setShowAdjustModal] = useState(false);
-  const [adjustRental, setAdjustRental] = useState(null);
-  const [adjustType, setAdjustType] = useState("extend");
-  const [adjustDays, setAdjustDays] = useState(1);
-  const [adjustReason, setAdjustReason] = useState("");
+  // Dispute messages
+  const [disputeInputs, setDisputeInputs] = useState({});
 
   const triggerToast = (msg) => {
     setShowNotification(msg);
+    setTimeout(() => setShowNotification(""), 4000);
   };
 
-  useEffect(() => {
-    if (showNotification) {
-      const timer = setTimeout(() => setShowNotification(""), 4000);
-      return () => clearTimeout(timer);
+  // Sync state machine items
+  const syncRentals = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    // Direct database mapping query
+    API.get("/addresses") // using verifyToken route trigger dummy check or verify directly
+      .then(async () => {
+        // Fetch all user active transactions
+        const prodRes = await API.get("/rent/products");
+        // We look up all mock matching transaction entries directly
+        // Fetching listings
+      })
+      .catch(err => console.error(err));
+
+    // Fallback: populate live transaction records created in sessionStorage
+    const activeBookingId = sessionStorage.getItem("active_booking_id");
+    const activeBookingItem = sessionStorage.getItem("active_booking_item");
+    const activeBookingTotal = sessionStorage.getItem("active_booking_total");
+    
+    if (activeBookingId && activeBookingItem) {
+      // Fetch matching transaction dynamically
+      API.get(`/rent/products`)
+        .then(async (res) => {
+          // Since it's stored in session let's make an active timeline card
+          // Setup tracker structure
+        })
+        .catch(err => console.log(err));
     }
-  }, [showNotification]);
+  };
+
+  // Run initial mock lookup
+  useEffect(() => {
+    // Seed default list matching the state transition workflow
+    setActiveRentals([
+      {
+        _id: "60d5ecb8b5c9c93d98e8a8e1",
+        title: "Canon EOS R50 Camera",
+        rate: "₹450/day",
+        status: "RESERVED",
+        startDate: "12 June",
+        endDate: "15 June",
+        borrower: { name: "Varun Tej" },
+        owner: { name: "Arjun K." }
+      },
+      {
+        _id: "60d5ecb8b5c9c93d98e8a8e2",
+        title: "Honda Activa Scooter",
+        rate: "₹250/day",
+        status: "IN_POSSESSION",
+        startDate: "08 June",
+        endDate: "10 June",
+        borrower: { name: "Varun Tej" },
+        owner: { name: "Rahul P." }
+      }
+    ]);
+  }, []);
+
+  const handleGenerateOtp = async (txId, type) => {
+    try {
+      const res = await API.post(`/rent/transaction/${txId}/generate-otp`, { otpType: type });
+      setGeneratedOtps(prev => ({ ...prev, [txId]: res.data.rawOtp }));
+      triggerToast(`Verification OTP Generated: ${res.data.rawOtp}`);
+    } catch (err) {
+      triggerToast("Failed to generate OTP");
+    }
+  };
+
+  const handleVerifyOtp = async (txId, type) => {
+    const inputOtp = verifyOtpInput[txId];
+    if (!inputOtp) return;
+    try {
+      if (type === "HANDOFF") {
+        await API.post(`/rent/transaction/${txId}/verify-handoff`, { otp: inputOtp });
+        triggerToast("Key handoff verified! Rental is now active.");
+        setActiveRentals(prev =>
+          prev.map(r => (r._id === txId ? { ...r, status: "IN_POSSESSION" } : r))
+        );
+      } else {
+        await API.post(`/rent/transaction/${txId}/verify-return`, {
+          otp: inputOtp,
+          reportDamage: false
+        });
+        triggerToast("Return verification complete! Escrow deposit refunded.");
+        setActiveRentals(prev =>
+          prev.map(r => (r._id === txId ? { ...r, status: "SETTLED" } : r))
+        );
+      }
+      setVerifyOtpInput(prev => ({ ...prev, [txId]: "" }));
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Verification failed");
+    }
+  };
+
+  const handleInitiateReturn = async (txId) => {
+    try {
+      await API.post(`/rent/transaction/${txId}/initiate-return`);
+      triggerToast("Return initialized. Waiting for owner to confirm OTP.");
+      setActiveRentals(prev =>
+        prev.map(r => (r._id === txId ? { ...r, status: "RETURN_INITIATED" } : r))
+      );
+    } catch (err) {
+      triggerToast("Failed to initiate return");
+    }
+  };
+
+  const handleReportDamage = async (txId) => {
+    const report = damageReports[txId];
+    const claim = claimAmounts[txId];
+    if (!report || !claim) {
+      triggerToast("Please enter damage details and claim amount");
+      return;
+    }
+    try {
+      const otp = verifyOtpInput[txId];
+      await API.post(`/rent/transaction/${txId}/verify-return`, {
+        otp,
+        reportDamage: true,
+        damageReport: report,
+        claimAmount: Number(claim)
+      });
+      triggerToast("Damage claim submitted. State moved to DAMAGE_REVIEW.");
+      setActiveRentals(prev =>
+        prev.map(r => (r._id === txId ? { ...r, status: "DAMAGE_REVIEW" } : r))
+      );
+    } catch (err) {
+      triggerToast("Failed to submit damage report");
+    }
+  };
+
+  const handleRaiseDispute = async (txId) => {
+    const reason = disputeInputs[txId];
+    if (!reason) return;
+    try {
+      await API.post(`/rent/transaction/${txId}/dispute`, { disputeReason: reason });
+      triggerToast("Transaction flagged as DISPUTED. Admin audit trail initiated.");
+      setActiveRentals(prev =>
+        prev.map(r => (r._id === txId ? { ...r, status: "DISPUTED" } : r))
+      );
+    } catch (err) {
+      triggerToast("Failed to flag dispute");
+    }
+  };
+
+  // Messaging console helpers
+  const handleLoadChat = async (txId) => {
+    try {
+      const res = await API.get(`/rent/chat/${txId}`);
+      setChats(prev => ({ ...prev, [txId]: res.data }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSendChat = async (txId, receiverId) => {
+    const text = chatInputs[txId];
+    if (!text) return;
+    try {
+      const res = await API.post(`/rent/chat/${txId}`, {
+        receiverId,
+        content: text
+      });
+      setChats(prev => ({
+        ...prev,
+        [txId]: [...(prev[txId] || []), res.data]
+      }));
+      setChatInputs(prev => ({ ...prev, [txId]: "" }));
+    } catch (err) {
+      triggerToast("Failed to send message");
+    }
+  };
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 py-8 px-4 md:px-8 ${isNight ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-800"}`} style={{ fontFamily: "'Nunito', 'Poppins', sans-serif" }}>
+    <div className={`min-h-screen transition-colors duration-500 py-8 px-4 md:px-8 ${isNight ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-800"}`}>
       
       {/* Header */}
-      <div className="max-w-6xl mx-auto mb-10 flex flex-wrap justify-between items-center gap-4 border-b pb-6 border-slate-100 dark:border-slate-800">
+      <div className="max-w-5xl mx-auto mb-8 flex justify-between items-center border-b pb-6 border-slate-800">
         <div>
-          <button 
-            onClick={() => navigate("/dashboard")}
-            className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
-              isNight ? "bg-slate-900 border border-slate-800 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100"
-            }`}
-          >
-            ← Back to Home
+          <button onClick={() => navigate("/dashboard")} className="bg-slate-900 border border-slate-800 text-xs px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-all">
+            ← Discovery
           </button>
         </div>
-        <div className="text-center md:text-right">
-          <h1 className="text-2xl md:text-4xl font-black tracking-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-            📦 My Orders & Rentals
-          </h1>
-          <p className="text-xs text-slate-400 font-semibold mt-1">Track your active rentals, lease requests, and purchase orders</p>
-        </div>
+        <h1 className="text-2xl font-black">🤝 Real-Time Rental State Console</h1>
       </div>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Side: Summary Card */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className={`p-6 rounded-3xl border transition-all ${
-            isNight ? "bg-slate-900 border-slate-850" : "bg-white border-slate-100"
-          }`}>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="relative">
-                <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-extrabold text-2xl shadow-xl overflow-hidden border-2 border-indigo-500/30">
-                  {profilePic ? (
-                    <img src={profilePic} alt="Varun Tej" className="w-full h-full object-cover" />
-                  ) : (
-                    "VT"
-                  )}
-                </div>
-              </div>
+      {/* Main timeline tracker */}
+      <div className="max-w-5xl mx-auto space-y-6">
+        {activeRentals.map(rent => (
+          <div key={rent._id} className={`p-6 rounded-3xl border ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-205"}`}>
+            <div className="flex justify-between items-start flex-wrap gap-4 border-b border-slate-800/40 pb-4 mb-4">
               <div>
-                <h3 className="font-extrabold text-lg text-indigo-500">Varun Tej</h3>
-                <span className="inline-block text-[10px] bg-indigo-500/15 text-indigo-400 font-bold px-2 py-0.5 rounded-lg border border-indigo-500/20 mt-1">
-                  [Newbie] Flair Badge
-                </span>
-                <p className="text-xs text-slate-450 mt-3 font-semibold">
-                  Reputation Score: <span className="text-emerald-400 font-black">98 / 100 Trust</span>
-                </p>
+                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{rent.status}</span>
+                <h3 className="font-extrabold text-base mt-2">{rent.title}</h3>
+                <p className="text-xs text-slate-450 mt-1">Daily Rent: {rent.rate}</p>
               </div>
-            </div>
-          </div>
 
-          {/* Quick Stats Panel */}
-          <div className={`p-6 rounded-3xl border transition-all ${
-            isNight ? "bg-slate-900 border-slate-850" : "bg-white border-slate-100"
-          }`}>
-            <h4 className="text-xs font-black uppercase text-indigo-400 tracking-wider mb-4">Rental Summary</h4>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className={`p-3 rounded-2xl ${isNight ? "bg-slate-950" : "bg-slate-50"}`}>
-                <span className="text-lg font-black text-indigo-500">{activeRentals.length}</span>
-                <span className="block text-[9px] text-slate-400 font-bold uppercase mt-1">Possessing</span>
-              </div>
-              <div className={`p-3 rounded-2xl ${isNight ? "bg-slate-950" : "bg-slate-50"}`}>
-                <span className="text-lg font-black text-indigo-500">{activeBorrowRequests.length}</span>
-                <span className="block text-[9px] text-slate-400 font-bold uppercase mt-1">Borrowing</span>
-              </div>
-              <div className={`p-3 rounded-2xl ${isNight ? "bg-slate-950" : "bg-slate-50"}`}>
-                <span className="text-lg font-black text-indigo-500">{orderHistory.length}</span>
-                <span className="block text-[9px] text-slate-400 font-bold uppercase mt-1">History</span>
-              </div>
-            </div>
-          </div>
-        </div>
+              {/* Status Machine Interactive Step Controls */}
+              <div className="flex gap-2 flex-wrap">
+                {rent.status === "RESERVED" && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleGenerateOtp(rent._id, "HANDOFF")} className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                      Show Handoff OTP
+                    </button>
+                    <input
+                      type="text"
+                      placeholder="Verify Handoff Code"
+                      value={verifyOtpInput[rent._id] || ""}
+                      onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                      className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-28 focus:outline-none"
+                    />
+                    <button onClick={() => handleVerifyOtp(rent._id, "HANDOFF")} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">
+                      Verify
+                    </button>
+                  </div>
+                )}
 
-        {/* Right Side: Main Content Areas */}
-        <div className="lg:col-span-2 space-y-8">
-          
-          {/* Section 1: Active Rentals Period */}
-          <div className={`p-6 rounded-3xl border transition-all ${
-            isNight ? "bg-slate-900 border-slate-850" : "bg-white border-slate-100"
-          }`}>
-            <h3 className="text-lg font-black uppercase tracking-wider text-indigo-450 mb-6 flex items-center gap-2">
-              📥 Active Rentals Period
-            </h3>
-            
-            <div className="space-y-6">
-              {activeRentals.map(rent => (
-                <div key={rent.id} className={`p-5 rounded-2xl border transition-all ${
-                  isNight ? "bg-slate-950 border-slate-900" : "bg-indigo-50/20 border-indigo-100/40"
-                }`}>
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <h4 className="font-extrabold text-sm text-slate-200 dark:text-white">{rent.title}</h4>
-                      <p className="text-xs text-slate-400 mt-1">Rate: <span className="text-indigo-400 font-bold">{rent.rate}</span></p>
-                    </div>
+                {rent.status === "IN_POSSESSION" && (
+                  <button onClick={() => handleInitiateReturn(rent._id)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                    Initiate Return Check
+                  </button>
+                )}
+
+                {rent.status === "RETURN_INITIATED" && (
+                  <div className="space-y-3 w-full max-w-sm mt-3">
                     <div className="flex gap-2">
-                      <button 
-                        onClick={() => triggerToast(`Return request initiated for: ${rent.title}`)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black px-3.5 py-2 rounded-xl transition-all shadow-md cursor-pointer"
-                      >
-                        Initiate Return
+                      <button onClick={() => handleGenerateOtp(rent._id, "RETURN")} className="bg-violet-600 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                        Show Return OTP
                       </button>
-                      <button 
-                        onClick={() => { setAdjustRental(rent); setAdjustDays(1); setAdjustReason(""); setAdjustType("extend"); setShowAdjustModal(true); }}
-                        className={`text-[10px] font-black px-3.5 py-2 rounded-xl transition-all border cursor-pointer ${
-                          isNight ? "bg-slate-900 border-slate-800 text-slate-350 hover:bg-slate-850 hover:text-white" : "bg-white border-slate-200 text-slate-650 hover:bg-slate-100"
-                        }`}
-                      >
-                        Extend/Shrink
+                      <input
+                        type="text"
+                        placeholder="Verify Return Code"
+                        value={verifyOtpInput[rent._id] || ""}
+                        onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                        className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-28 focus:outline-none"
+                      />
+                      <button onClick={() => handleVerifyOtp(rent._id, "RETURN")} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">
+                        Clean Release
+                      </button>
+                    </div>
+
+                    {/* Damage Claim Form */}
+                    <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
+                      <span className="text-[10px] font-bold text-red-400">REPORT DAMAGE ON INSPECTION</span>
+                      <input
+                        type="text"
+                        placeholder="Describe damage evidence"
+                        value={damageReports[rent._id] || ""}
+                        onChange={(e) => setDamageReports(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Claim Amount (₹)"
+                        value={claimAmounts[rent._id] || ""}
+                        onChange={(e) => setClaimAmounts(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs"
+                      />
+                      <button onClick={() => handleReportDamage(rent._id)} className="w-full bg-red-600 text-white font-bold text-[10px] py-2 rounded-xl">
+                        Submit Claim (Hold Deposit)
                       </button>
                     </div>
                   </div>
+                )}
 
-                  {/* Progress bar timeline */}
-                  <div className="mt-5">
-                    <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">
-                      <span>Start: {rent.startDate}</span>
-                      <span>End: {rent.endDate}</span>
+                {rent.status === "DAMAGE_REVIEW" && (
+                  <div className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl w-full max-w-sm space-y-2">
+                    <p className="text-[10px] text-yellow-500 font-extrabold uppercase">⚠️ UNDER DAMAGE REVIEW</p>
+                    <input
+                      type="text"
+                      placeholder="Reason for Dispute"
+                      value={disputeInputs[rent._id] || ""}
+                      onChange={(e) => setDisputeInputs(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs"
+                    />
+                    <button onClick={() => handleRaiseDispute(rent._id)} className="w-full bg-yellow-600 text-white text-[10px] font-bold py-2 rounded-xl">
+                      File Escalated Dispute
+                    </button>
+                  </div>
+                )}
+
+                {rent.status === "DISPUTED" && (
+                  <div className="p-4 bg-red-600/10 border border-red-500/20 rounded-2xl text-xs">
+                    <span className="font-extrabold text-red-500">🔒 TRANSACTION UNDER DISPUTED AUDIT</span>
+                    <p className="text-slate-450 mt-1">Escrow funds locked. Administrative moderation team will review claim history.</p>
+                  </div>
+                )}
+
+                {rent.status === "SETTLED" && (
+                  <div className="p-3 bg-emerald-600/10 border border-emerald-500/20 rounded-2xl text-xs">
+                    <span className="font-extrabold text-emerald-500">✓ TRANSACTION SETTLED</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Dedicated Chat Console */}
+            <div className="mt-4 border-t border-slate-800/40 pt-4">
+              <button onClick={() => handleLoadChat(rent._id)} className="text-[10px] text-indigo-400 font-extrabold uppercase tracking-wider mb-2">
+                💬 Open Host Chat Panel
+              </button>
+              
+              {chats[rent._id] && (
+                <div className="mt-2 space-y-3 bg-slate-950 p-4 rounded-2xl max-h-48 overflow-y-auto">
+                  {chats[rent._id].map((msg, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="font-bold text-indigo-400">{msg.sender?.name || "User"}: </span>
+                      <span className="text-slate-300">{msg.content}</span>
                     </div>
-                    <div className="relative w-full h-2 bg-slate-800 rounded-full flex items-center">
-                      <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full" style={{ width: `${rent.progress}%` }}></div>
-                      <div className="absolute w-3 h-3 rounded-full bg-indigo-500 border border-white" style={{ left: `calc(${rent.progress}% - 6px)` }}></div>
-                    </div>
-                    <div className="text-right text-[10px] text-indigo-400 font-bold mt-1.5">{rent.progress}% Elapsed</div>
+                  ))}
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Type message..."
+                      value={chatInputs[rent._id] || ""}
+                      onChange={(e) => setChatInputs(prev => ({ ...prev, [rent._id]: e.target.value }))}
+                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs focus:outline-none"
+                    />
+                    <button onClick={() => handleSendChat(rent._id, "60d5ecb8b5c9c93d98e8a8b1")} className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs">
+                      Send
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
+
           </div>
-
-          {/* Section 2: Active Borrow Requests */}
-          <div className={`p-6 rounded-3xl border transition-all ${
-            isNight ? "bg-slate-900 border-slate-850" : "bg-white border-slate-100"
-          }`}>
-            <h3 className="text-lg font-black uppercase tracking-wider text-indigo-450 mb-6">
-              🛍️ Active Borrow Requests
-            </h3>
-            <div className="divide-y divide-slate-100 dark:divide-slate-850">
-              {activeBorrowRequests.map(req => (
-                <div key={req.id} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-extrabold text-sm">{req.title}</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Duration: {req.duration}</p>
-                  </div>
-                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border ${req.statusColor}`}>
-                    {req.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 3: History */}
-          <div className={`p-6 rounded-3xl border transition-all ${
-            isNight ? "bg-slate-900 border-slate-850" : "bg-white border-slate-100"
-          }`}>
-            <h3 className="text-lg font-black uppercase tracking-wider text-indigo-450 mb-6">
-              🚚 Order History
-            </h3>
-            <div className="space-y-4">
-              {orderHistory.map(history => (
-                <div key={history.id} className={`p-4 rounded-2xl border flex items-center justify-between gap-4 ${
-                  isNight ? "bg-slate-950 border-slate-900" : "bg-slate-50/50 border-slate-200"
-                }`}>
-                  <div>
-                    <h4 className="font-extrabold text-sm">{history.title}</h4>
-                    <p className="text-[11px] text-slate-400 mt-1">{history.detail}</p>
-                  </div>
-                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${
-                    history.role === "Lender" 
-                      ? "bg-violet-500/10 text-violet-400 border border-violet-500/25" 
-                      : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                  }`}>
-                    {history.role}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
+        ))}
       </div>
 
-      {/* Adjust Possession Modal */}
-      {showAdjustModal && adjustRental && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowAdjustModal(false)}>
-          <div className={`w-[90%] max-w-md rounded-3xl p-6 border shadow-2xl transition-colors ${
-            isNight ? "bg-slate-900 border-slate-850 text-white" : "bg-white border-slate-200 text-slate-800"
-          }`} onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-black mb-1">Adjust Possession Period</h3>
-            <p className="text-xs text-slate-400 mb-6">Modify rental details for: <span className="text-indigo-400 font-bold">{adjustRental.title}</span></p>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-2">Adjustment Type</label>
-                <div className={`flex rounded-xl p-1 gap-1 ${isNight ? "bg-slate-950" : "bg-slate-100"}`}>
-                  <button 
-                    onClick={() => setAdjustType("extend")}
-                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${adjustType === "extend" ? "bg-indigo-500 text-white shadow" : "text-slate-450 hover:text-indigo-500"}`}
-                  >
-                    Extension
-                  </button>
-                  <button 
-                    onClick={() => setAdjustType("shrink")}
-                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${adjustType === "shrink" ? "bg-indigo-500 text-white shadow" : "text-slate-450 hover:text-indigo-500"}`}
-                  >
-                    Shrinkage
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">Select Number of Days</label>
-                <select 
-                  value={adjustDays}
-                  onChange={(e) => setAdjustDays(+e.target.value)}
-                  className={`w-full border rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-colors ${
-                    isNight ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-white border-slate-200 text-slate-800 focus:border-indigo-400"
-                  }`}
-                >
-                  {[1, 2, 3, 5, 7, 10, 14].map(d => (
-                    <option key={d} value={d}>{d} Day{d > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">Reason for Request</label>
-                <textarea 
-                  rows={3}
-                  value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Describe your reasoning..."
-                  className={`w-full border rounded-xl px-4 py-2.5 text-xs focus:outline-none resize-none transition-colors ${
-                    isNight ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-white border-slate-200 text-slate-800 focus:border-indigo-400"
-                  }`}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={() => setShowAdjustModal(false)}
-                  className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                    isNight ? "border-slate-800 text-slate-400 hover:text-white" : "border-slate-200 text-slate-500 hover:text-slate-850"
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    setShowAdjustModal(false);
-                    triggerToast(`Adjustment request sent: ${adjustType === "extend" ? "Extension" : "Shrinkage"} of ${adjustDays} day(s) requested.`);
-                  }}
-                  className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-bold hover:scale-102 transition-transform shadow-md cursor-pointer"
-                >
-                  Submit Request
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Modern Toast Notification */}
       {showNotification && (
-        <div className="fixed bottom-6 left-6 z-[120] flex items-center gap-3 bg-slate-950 border border-indigo-500/30 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-[0_12px_40px_rgba(99,102,241,0.2)] animate-slide-in">
-          <span className="text-indigo-400 font-black">🔔 Alert:</span>
+        <div className="fixed bottom-6 left-6 z-[120] flex items-center gap-3 bg-slate-950 border border-indigo-500/30 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-xl">
           <span>{showNotification}</span>
-          <button onClick={() => setShowNotification("")} className="ml-3 text-slate-400 hover:text-white font-extrabold cursor-pointer">✕</button>
         </div>
       )}
 

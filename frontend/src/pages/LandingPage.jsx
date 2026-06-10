@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { CityStreetScene } from "../components/CityStreetScene";
 import API from "../api"; 
 import { STORAGE_KEYS } from "../constants/auth";
+import PostProductModal from "../components/PostProductModal";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
@@ -90,8 +91,14 @@ const ChatMsg = ({ from, text, isNight }) => (
   </div>
 );
 
+const getImageUrl = (image) => {
+  if (!image) return "";
+  if (typeof image === "string") return image;
+  return image.url || "";
+};
+
 // ── Premium Product Card with Image Slider & Emojis ─────────────────────────
-const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick }) => {
+const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const [showFadeMsg, setShowFadeMsg] = useState(false);
 
@@ -119,6 +126,19 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
   const triggerFadeMsg = () => {
     setShowFadeMsg(true);
     setTimeout(() => setShowFadeMsg(false), 2000);
+  };
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(1);
   };
 
   return (
@@ -153,7 +173,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         isNight ? "bg-gradient-to-br from-slate-800 to-slate-950" : "bg-gradient-to-br from-indigo-50 to-violet-50"
       }`}>
         {images.length > 0 ? (
-          <img src={images[imgIndex]} alt={item.title} className="w-full h-full object-cover" />
+          <img src={getImageUrl(images[imgIndex])} alt={item.title} className="w-full h-full object-cover" />
         ) : (
           <span className="select-none">{item.emoji}</span>
         )}
@@ -189,19 +209,48 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         )}
       </div>
 
-      <div className="p-4">
-        <h3 className={`font-black text-sm mb-1 truncate ${isNight ? "text-slate-100" : "text-slate-800"}`}>
+      <div className="p-4 flex flex-col gap-1.5">
+        <h3 className={`font-black text-sm truncate ${isNight ? "text-slate-100" : "text-slate-800"}`}>
           {item.title}
         </h3>
-        <p className="text-[10px] text-slate-400 font-semibold mb-3">
-          👤 {item.owner} • 📍 {item.distance}
+        
+        <div className="flex items-baseline gap-1">
+          <span className="text-indigo-400 font-black text-base">₹{item.price}</span>
+          <span className="text-[10px] text-slate-400 font-normal">/{item.unit || "day"}</span>
+        </div>
+
+        {item.securityDeposit !== undefined && item.securityDeposit > 0 && (
+          <p className="text-[10px] text-slate-450 font-bold">
+            🛡️ Security Deposit: <span className="text-indigo-400">₹{item.securityDeposit}</span>
+          </p>
+        )}
+
+        <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+          <span>👤</span> {item.owner}
         </p>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-          <span className="text-indigo-400 font-black text-base">
-            ₹{item.price}
-            <span className="text-[10px] text-slate-400 font-normal">/{item.unit || "day"}</span>
-          </span>
+        <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+          <span>📍</span> {item.area || "Local"}
+        </p>
+
+        <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <div className="flex flex-col">
+            <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">Proximity</span>
+            {coordsLoading ? (
+              <span className="text-[10px] text-indigo-400 font-bold animate-pulse">Calculating distance...</span>
+            ) : coordsError ? (
+              <span className="text-[9px] text-amber-500 font-bold" title={coordsError}>Distance unavailable ⚠️</span>
+            ) : (
+              <span className="text-xs text-indigo-400 font-black bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/25">
+                ⚡ {calculateDistance(
+                  userCoords?.latitude,
+                  userCoords?.longitude,
+                  item.location?.coordinates?.[1],
+                  item.location?.coordinates?.[0]
+                )} km away
+              </span>
+            )}
+          </div>
           <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
             {item.rowType === "Second-Hand" ? "Buy Out" : "Rent Flow"}
           </button>
@@ -220,6 +269,34 @@ export default function Dashboard() {
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [postModalOpen, setPostModalOpen] = useState(false);
+
+  const [userCoords, setUserCoords] = useState(null);
+  const [coordsLoading, setCoordsLoading] = useState(true);
+  const [coordsError, setCoordsError] = useState("");
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserCoords({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+          setCoordsLoading(false);
+        },
+        (error) => {
+          console.error("Error getting geolocation:", error);
+          setCoordsError("Distance unavailable. Enable location access to view distance.");
+          setCoordsLoading(false);
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      setCoordsError("Distance unavailable. Geolocation is not supported by this browser.");
+      setCoordsLoading(false);
+    }
+  }, []);
 
   // Address Panel
   const [addressModalOpen, setAddressModalOpen] = useState(false);
@@ -228,7 +305,23 @@ export default function Dashboard() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [pincodeError, setPincodeError] = useState("");
 
+  const [dbProducts, setDbProducts] = useState([]);
+  const [dbWishes, setDbWishes] = useState([]);
+
+  const syncProducts = () => {
+    API.get("/rent/products")
+      .then(res => setDbProducts(res.data))
+      .catch(err => console.error("Error fetching db products:", err));
+  };
+
   useEffect(() => {
+    syncProducts();
+
+    // Fetch wishes
+    API.get("/wishes")
+      .then(res => setDbWishes(res.data))
+      .catch(err => console.error("Error fetching db wishes:", err));
+
     const token = localStorage.getItem("token");
     if (token) {
       API.get("/addresses")
@@ -580,6 +673,19 @@ export default function Dashboard() {
               {isNight ? "🌙" : "☀️"}
             </button>
 
+            <button
+              onClick={() => {
+                if (isLoggedIn) {
+                  setPostModalOpen(true);
+                } else {
+                  navigate("/login");
+                }
+              }}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white text-xs px-3.5 py-2.5 rounded-xl font-bold transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              + Post Item
+            </button>
+
             {isLoggedIn ? (
               <div className="relative">
                 <button
@@ -679,6 +785,18 @@ export default function Dashboard() {
               <button onClick={() => navigate("/rent-catalog")} className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-8 py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 active:scale-95 cursor-pointer">
                 🚀 Start Renting
               </button>
+              <button 
+                onClick={() => {
+                  if (isLoggedIn) {
+                    setPostModalOpen(true);
+                  } else {
+                    navigate("/login");
+                  }
+                }} 
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 cursor-pointer"
+              >
+                📢 Post an Item
+              </button>
               <button onClick={() => navigate("/orders")} className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black text-lg shadow-md hover:shadow-xl border-2 border-indigo-200 hover:border-indigo-400 hover:scale-105 transition-all duration-200 cursor-pointer">
                 📦 My Orders
               </button>
@@ -745,7 +863,7 @@ export default function Dashboard() {
         {/* Row 1: Items Available For Rent */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-black tracking-tight dark:text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               🛒 Items Available For Rent
             </h2>
             <button onClick={() => navigate("/rent-catalog")} className="text-xs font-black text-indigo-500 hover:underline">
@@ -753,14 +871,17 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {rowRentItems.map((item) => (
+            {dbProducts.filter(p => p.productType === "RENT").map((item) => (
               <ProductCard 
-                key={item.id} 
-                item={item} 
+                key={item._id} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "📷", owner: item.owner?.name || "Owner", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
                 isNight={isNight} 
-                isBookmarked={bookmarkedIds.includes(item.id)}
-                onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate(`/product/${item.id}`)}
+                isBookmarked={bookmarkedIds.includes(item._id)}
+                onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
+                onCardClick={() => navigate(`/product/${item._id}`)}
+                userCoords={userCoords}
+                coordsLoading={coordsLoading}
+                coordsError={coordsError}
               />
             ))}
           </div>
@@ -769,7 +890,7 @@ export default function Dashboard() {
         {/* Row 2: Items You Are Listing */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-black tracking-tight dark:text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               📦 Items You Are Listing
             </h2>
             <button onClick={() => navigate("/orders")} className="text-xs font-black text-indigo-500 hover:underline">
@@ -777,14 +898,17 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {rowListedItems.map((item) => (
+            {dbProducts.slice(0, 2).map((item) => (
               <ProductCard 
-                key={item.id} 
-                item={item} 
+                key={item._id} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "Varun Tej (You)", area: item.area, badge: "Active", location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
                 isNight={isNight} 
-                isBookmarked={bookmarkedIds.includes(item.id)}
-                onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate("/orders")}
+                isBookmarked={bookmarkedIds.includes(item._id)}
+                onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
+                onCardClick={() => navigate(`/product/${item._id}`)}
+                userCoords={userCoords}
+                coordsLoading={coordsLoading}
+                coordsError={coordsError}
               />
             ))}
           </div>
@@ -793,7 +917,7 @@ export default function Dashboard() {
         {/* Row 3: Available For Second-Hand Purchase */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-black tracking-tight dark:text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               🤝 Available For Second-Hand Purchase
             </h2>
             <button onClick={() => navigate("/second-hand-catalog")} className="text-xs font-black text-indigo-500 hover:underline">
@@ -801,23 +925,29 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {rowSecondHandItems.map((item) => (
+            {dbProducts.filter(p => p.productType === "SECOND_HAND").map((item) => (
               <ProductCard 
-                key={item.id} 
-                item={item} 
+                key={item._id} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "🚁", owner: item.owner?.name || "Owner", area: item.area, badge: "Direct Sale", location: item.location, securityDeposit: item.securityDeposit, images: item.images, rowType: "Second-Hand", unit: "flat" }} 
                 isNight={isNight} 
-                isBookmarked={bookmarkedIds.includes(item.id)}
-                onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate(`/product/${item.id}`)}
+                isBookmarked={bookmarkedIds.includes(item._id)}
+                onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
+                onCardClick={() => navigate(`/product/${item._id}`)}
+                userCoords={userCoords}
+                coordsLoading={coordsLoading}
+                coordsError={coordsError}
               />
             ))}
+            {dbProducts.filter(p => p.productType === "SECOND_HAND").length === 0 && (
+              <p className="text-xs text-slate-400 p-4">No second-hand buyout listings currently active.</p>
+            )}
           </div>
         </div>
 
         {/* Row 4: Requested Products (Borrow Wishes) */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-black tracking-tight dark:text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               📢 Requested Products (Borrow Wishes)
             </h2>
             <button onClick={() => navigate("/requested-catalog")} className="text-xs font-black text-indigo-500 hover:underline">
@@ -825,14 +955,17 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {rowRequestedItems.map((item) => (
+            {dbWishes.map((item) => (
               <ProductCard 
-                key={item.id} 
-                item={item} 
+                key={item._id} 
+                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0 }} 
                 isNight={isNight} 
-                isBookmarked={bookmarkedIds.includes(item.id)}
-                onBookmarkToggle={handleBookmarkToggle}
-                onCardClick={() => navigate(`/product/${item.id}`)}
+                isBookmarked={bookmarkedIds.includes(item._id)}
+                onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
+                onCardClick={() => navigate(`/requested-catalog`)}
+                userCoords={userCoords}
+                coordsLoading={coordsLoading}
+                coordsError={coordsError}
               />
             ))}
           </div>
@@ -998,11 +1131,24 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        <button onClick={() => setChatOpen(o => !o)} className="relative w-14 h-14 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-full shadow-2xl flex items-center justify-center text-2xl hover:scale-110 transition-all duration-200 active:scale-95 cursor-pointer z-50">
+        <button
+          onClick={() => setChatOpen((o) => !o)}
+          className="relative w-14 h-14 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-full shadow-2xl flex items-center justify-center text-2xl hover:scale-110 transition-all duration-200 active:scale-95 cursor-pointer z-50"
+        >
           {chatOpen ? "✕" : "🤖"}
         </button>
-      </div>
 
+        {/* Post Product Modal */}
+        <PostProductModal
+          isOpen={postModalOpen}
+          onClose={() => setPostModalOpen(false)}
+          isNight={isNight}
+          onProductCreated={() => {
+            syncProducts();
+            triggerToast("Product listing published successfully! 🚀");
+          }}
+        />
+      </div>
     </div>
   );
 }

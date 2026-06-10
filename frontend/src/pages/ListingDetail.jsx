@@ -181,8 +181,8 @@ export default function ListingDetail() {
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-sm font-bold shrink-0">🛡️</div>
                 <div>
-                  <h4 className="text-xs font-black">Secure Verification</h4>
-                  <p className="text-[10px] text-slate-400">ID and background checked owner</p>
+                  <h4 className="text-xs font-black">Trusted Owner</h4>
+                  <p className="text-[10px] text-slate-400">Highly rated community profile</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

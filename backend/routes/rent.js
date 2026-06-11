@@ -27,21 +27,35 @@ const VALID_TRANSITIONS = {
 };
 
 // Check Overlapping Availability Conflicting Reservations
-async function checkOverlap(productId, start, end) {
+async function checkOverlap(productId, start, end, session = null) {
   const overlapping = await Transaction.findOne({
     product: productId,
     status: { $in: ["RESERVED", "IN_POSSESSION", "RETURN_INITIATED", "DAMAGE_REVIEW", "REFUND_PROCESSING"] },
     $or: [
       { startDate: { $lte: new Date(end) }, endDate: { $gte: new Date(start) } }
     ]
-  });
+  }).session(session);
   return !overlapping;
 }
 
 // Helper to push automated notifications
-async function createNotification(userId, type, title, message) {
+async function createNotification(userId, type, title, message, senderId = null, link = "", session = null) {
   try {
-    await Notification.create({ user: userId, type, title, message });
+    let newType = "SYSTEM";
+    if (["NEW_NEGOTIATION_OFFER", "OFFER_ACCEPTED", "NEW_BID", "OUTBID_ALERT"].includes(type)) {
+      newType = "NEGOTIATION";
+    } else if (["RETURN_INITIATED", "DISPUTE_RAISED", "SETTLEMENT_COMPLETED"].includes(type)) {
+      newType = "ORDER";
+    }
+    
+    const notif = new Notification({
+      recipient: userId,
+      sender: senderId,
+      message: `${title}: ${message}`,
+      type: newType,
+      link: link
+    });
+    await notif.save({ session });
   } catch (err) {
     console.error("Notification creation failed:", err);
   }
@@ -55,7 +69,7 @@ async function createNotification(userId, type, title, message) {
 router.get("/products", async (req, res) => {
   try {
     const { productType, category, minPrice, maxPrice, search } = req.query;
-    let query = {};
+    let query = { status: { $ne: "INACTIVE" } }; // Hide disabled products from public catalog
     if (productType) query.productType = productType;
     if (category && category !== "All") query.category = category;
     if (minPrice || maxPrice) {
@@ -68,6 +82,40 @@ router.get("/products", async (req, res) => {
     }
     const products = await Product.find(query).populate("owner", "name email");
     res.json(products);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Get User's Own Listed Products
+router.get("/products/me", verifyToken, async (req, res) => {
+  try {
+    const products = await Product.find({ owner: req.userId }).populate("owner", "name email");
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Toggle Status between ACTIVE and INACTIVE
+router.put("/products/:id/toggle-status", verifyToken, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ msg: "Invalid product ID format." });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ msg: "Product listing not found." });
+    }
+
+    if (product.owner.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Unauthorized: You do not own this listing." });
+    }
+
+    product.status = product.status === "INACTIVE" ? "ACTIVE" : "INACTIVE";
+    await product.save();
+    res.json(product);
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -96,7 +144,7 @@ router.get("/products/:id", async (req, res) => {
 });
 
 // Add Product Listing
-router.post("/products", verifyToken, upload.array("images", 5), async (req, res) => {
+router.post("/products", verifyToken, upload.array("productImages", 5), async (req, res) => {
   console.log("ROUTE TRIGGERED: POST /products");
   console.log("HEADERS:", req.headers);
   console.log("BODY:", req.body);
@@ -119,10 +167,7 @@ router.post("/products", verifyToken, upload.array("images", 5), async (req, res
       const folder = productType === "RENT" ? "rentit/rent" : "rentit/secondhand";
       for (const file of req.files) {
         const result = await uploadToCloudinary(file.buffer, folder);
-        uploadedAssets.push({
-          url: result.secure_url,
-          publicId: result.public_id
-        });
+        uploadedAssets.push(result.secure_url);
       }
     }
 
@@ -199,15 +244,23 @@ router.delete("/products/:id", verifyToken, async (req, res) => {
 
 // Submit Initial Offer / Counter Offer
 router.post("/negotiate", verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { productId, startDate, endDate, dailyRate, securityDeposit } = req.body;
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ msg: "Product not found" });
+    const product = await Product.findById(productId).session(session);
+    if (!product) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ msg: "Product not found" });
+    }
 
     // Conflict Check
-    const available = await checkOverlap(productId, startDate, endDate);
+    const available = await checkOverlap(productId, startDate, endDate, session);
     if (!available) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ msg: "Product is already reserved during these dates!" });
     }
 
@@ -219,15 +272,15 @@ router.post("/negotiate", verifyToken, async (req, res) => {
       product: productId,
       borrower: req.userId,
       status: "PENDING_NEGOTIATION",
-    });
+    }).session(session);
 
     if (transaction) {
       transaction.negotiationHistory.push({ offeredBy: req.userId, rate: dailyRate });
       transaction.dailyRate = dailyRate;
       transaction.totalPaid = totalPaid;
-      await transaction.save();
+      await transaction.save({ session });
     } else {
-      transaction = await Transaction.create({
+      const createdDocs = await Transaction.create([{
         product: productId,
         borrower: req.userId,
         owner: product.owner,
@@ -238,36 +291,41 @@ router.post("/negotiate", verifyToken, async (req, res) => {
         totalPaid,
         status: "PENDING_NEGOTIATION",
         negotiationHistory: [{ offeredBy: req.userId, rate: dailyRate }],
-      });
+      }], { session });
+      transaction = createdDocs[0];
     }
 
     // Trigger Proximity/Surge monitor check
     const recentRequestsCount = await Transaction.countDocuments({
       product: productId,
       createdAt: { $gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } // past 2 hours
-    });
+    }).session(session);
 
     if (recentRequestsCount >= 5 && product.status === "ACTIVE") {
       // Auto Escalation to Active Micro-Auction
       product.status = "AUCTION_ACTIVE";
-      await product.save();
+      await product.save({ session });
 
       const endsInHours = 3;
-      await Auction.create({
+      await Auction.create([{
         product: product._id,
         floorPrice: product.rentalPrice,
         currentTopBid: dailyRate,
         currentTopBidder: req.userId,
         endsAt: new Date(Date.now() + endsInHours * 60 * 60 * 1000)
-      });
+      }], { session });
 
-      await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`);
+      await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`, req.userId, `/product/${product._id}`, session);
     } else {
-      await createNotification(product.owner, "NEW_NEGOTIATION_OFFER", "New Rental Negotiation", `You have received an offer for ${product.title}.`);
+      await createNotification(product.owner, "NEW_NEGOTIATION_OFFER", "New Rental Negotiation", `You have received an offer for ${product.title}.`, req.userId, `/product/${product._id}`, session);
     }
 
+    await session.commitTransaction();
+    session.endSession();
     res.json(transaction);
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ msg: err.message });
   }
 });
@@ -609,17 +667,27 @@ router.post("/auction/:productId/bid", verifyToken, async (req, res) => {
 // ==========================================
 router.get("/notifications", verifyToken, async (req, res) => {
   try {
-    const notifications = await Notification.find({ user: req.userId }).sort({ createdAt: -1 });
+    const notifications = await Notification.find({ recipient: req.userId, isRead: false }).sort({ createdAt: -1 });
     res.json(notifications);
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
 });
 
-// Mark Read
+// Mark All Read
+router.put("/notifications/read-all", verifyToken, async (req, res) => {
+  try {
+    await Notification.updateMany({ recipient: req.userId, isRead: false }, { isRead: true });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Mark Single Read
 router.put("/notifications/:id/read", verifyToken, async (req, res) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.id, { read: true });
+    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ msg: err.message });

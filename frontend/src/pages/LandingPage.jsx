@@ -4,6 +4,7 @@ import { CityStreetScene } from "../components/CityStreetScene";
 import API from "../api"; 
 import { STORAGE_KEYS } from "../constants/auth";
 import PostProductModal from "../components/PostProductModal";
+import NotificationBell from "../components/NotificationBell";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
@@ -98,7 +99,7 @@ const getImageUrl = (image) => {
 };
 
 // ── Premium Product Card with Image Slider & Emojis ─────────────────────────
-const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError }) => {
+const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const [showFadeMsg, setShowFadeMsg] = useState(false);
 
@@ -149,24 +150,34 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
       } hover:-translate-y-2 cursor-pointer`}
     >
       {/* Category/Status Badge */}
-      {item.badge && (
-        <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+      {isOwnerCard ? (
+        <div className={`absolute top-3 left-3 z-10 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+          item.badge === "INACTIVE" ? "bg-red-500" : "bg-emerald-500"
+        }`}>
           {item.badge}
         </div>
+      ) : (
+        item.badge && (
+          <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+            {item.badge}
+          </div>
+        )
       )}
 
       {/* Bookmark Button */}
-      <button 
-        onClick={(e) => {
-          e.stopPropagation();
-          onBookmarkToggle(item);
-        }}
-        className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow transition-all cursor-pointer ${
-          isBookmarked ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
-        }`}
-      >
-        🔖
-      </button>
+      {!isOwnerCard && (
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onBookmarkToggle(item);
+          }}
+          className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow transition-all cursor-pointer ${
+            isBookmarked ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
+          }`}
+        >
+          🔖
+        </button>
+      )}
 
       {/* Image / Carousel Layer */}
       <div className={`h-40 relative flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 overflow-hidden ${
@@ -233,27 +244,59 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
           <span>📍</span> {item.area || "Local"}
         </p>
 
-        <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-          <div className="flex flex-col">
-            <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">Proximity</span>
-            {coordsLoading ? (
-              <span className="text-[10px] text-indigo-400 font-bold animate-pulse">Calculating distance...</span>
-            ) : coordsError ? (
-              <span className="text-[9px] text-amber-500 font-bold" title={coordsError}>Distance unavailable ⚠️</span>
-            ) : (
-              <span className="text-xs text-indigo-400 font-black bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/25">
-                ⚡ {calculateDistance(
-                  userCoords?.latitude,
-                  userCoords?.longitude,
-                  item.location?.coordinates?.[1],
-                  item.location?.coordinates?.[0]
-                )} km away
-              </span>
-            )}
-          </div>
-          <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
-            {item.rowType === "Second-Hand" ? "Buy Out" : "Rent Flow"}
-          </button>
+        <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center w-full">
+          {isOwnerCard ? (
+            <div className="flex gap-2 w-full">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStatus?.(item.id);
+                }}
+                className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-black text-white shadow-md active:scale-95 transition-all cursor-pointer text-center ${
+                  item.badge === "INACTIVE" 
+                    ? "bg-slate-700 hover:bg-slate-650 border border-slate-650" 
+                    : "bg-emerald-600 hover:bg-emerald-500 border border-emerald-500"
+                }`}
+              >
+                {item.badge === "INACTIVE" ? "🟢 Enable" : "🔴 Disable"}
+              </button>
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteProduct?.(item.id);
+                }}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/25 p-2 rounded-xl text-xs font-black active:scale-95 transition-all cursor-pointer flex items-center justify-center aspect-square"
+                title="Delete Listing permanently"
+              >
+                🗑️
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col">
+                <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">Proximity</span>
+                {coordsLoading ? (
+                  <span className="text-[10px] text-indigo-400 font-bold animate-pulse">Calculating distance...</span>
+                ) : coordsError ? (
+                  <span className="text-[9px] text-amber-500 font-bold" title={coordsError}>Distance unavailable ⚠️</span>
+                ) : (
+                  <span className="text-xs text-indigo-400 font-black bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/25">
+                    ⚡ {calculateDistance(
+                      userCoords?.latitude,
+                      userCoords?.longitude,
+                      item.location?.coordinates?.[1],
+                      item.location?.coordinates?.[0]
+                    )} km away
+                  </span>
+                )}
+              </div>
+              <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
+                {item.rowType === "Second-Hand" ? "Buy Out" : "Rent Flow"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -306,12 +349,48 @@ export default function Dashboard() {
   const [pincodeError, setPincodeError] = useState("");
 
   const [dbProducts, setDbProducts] = useState([]);
+  const [myProducts, setMyProducts] = useState([]);
   const [dbWishes, setDbWishes] = useState([]);
+
+  const syncMyProducts = () => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      API.get("/rent/products/me")
+        .then(res => setMyProducts(res.data))
+        .catch(err => console.error("Error fetching my products:", err));
+    } else {
+      setMyProducts([]);
+    }
+  };
 
   const syncProducts = () => {
     API.get("/rent/products")
       .then(res => setDbProducts(res.data))
       .catch(err => console.error("Error fetching db products:", err));
+    syncMyProducts();
+  };
+
+  const handleToggleStatus = async (productId) => {
+    try {
+      await API.put(`/rent/products/${productId}/toggle-status`);
+      syncProducts();
+      setShowNotification("Listing visibility status updated successfully!");
+    } catch (err) {
+      console.error("Error toggling status:", err);
+      setShowNotification("Failed to update listing status.");
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this listing? This action cannot be undone.")) return;
+    try {
+      await API.delete(`/rent/products/${productId}`);
+      syncProducts();
+      setShowNotification("Listing deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting product:", err);
+      setShowNotification("Failed to delete listing.");
+    }
   };
 
   useEffect(() => {
@@ -462,6 +541,13 @@ export default function Dashboard() {
     setIsNight((prev) => {
       const next = !prev;
       localStorage.setItem("theme", next ? "night" : "day");
+      if (next) {
+        document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = "dark";
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.style.colorScheme = "light";
+      }
       return next;
     });
   };
@@ -673,18 +759,11 @@ export default function Dashboard() {
               {isNight ? "🌙" : "☀️"}
             </button>
 
-            <button
-              onClick={() => {
-                if (isLoggedIn) {
-                  setPostModalOpen(true);
-                } else {
-                  navigate("/login");
-                }
-              }}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white text-xs px-3.5 py-2.5 rounded-xl font-bold transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              + Post Item
-            </button>
+
+
+            {isLoggedIn && (
+              <NotificationBell isNight={isNight} />
+            )}
 
             {isLoggedIn ? (
               <div className="relative">
@@ -898,10 +977,10 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {dbProducts.slice(0, 2).map((item) => (
+            {myProducts.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "Varun Tej (You)", area: item.area, badge: "Active", location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "You", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -909,8 +988,14 @@ export default function Dashboard() {
                 userCoords={userCoords}
                 coordsLoading={coordsLoading}
                 coordsError={coordsError}
+                isOwnerCard={true}
+                onToggleStatus={handleToggleStatus}
+                onDeleteProduct={handleDeleteProduct}
               />
             ))}
+            {myProducts.length === 0 && (
+              <p className="text-xs text-slate-400 p-4">You haven't listed any items yet. Create a listing to get started!</p>
+            )}
           </div>
         </div>
 

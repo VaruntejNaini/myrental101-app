@@ -2,25 +2,16 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    message: { type: String, required: true },
+    isRead: { type: Boolean, default: false, index: true },
     type: {
       type: String,
-      enum: [
-        "NEW_BID",
-        "OUTBID_ALERT",
-        "NEW_NEGOTIATION_OFFER",
-        "WISH_OFFER_RECEIVED",
-        "OFFER_ACCEPTED",
-        "OTP_GENERATED",
-        "RETURN_INITIATED",
-        "DISPUTE_RAISED",
-        "SETTLEMENT_COMPLETED",
-      ],
+      enum: ["NEGOTIATION", "SYSTEM", "ORDER"],
       required: true,
     },
-    title: { type: String, required: true },
-    message: { type: String, required: true },
-    read: { type: Boolean, default: false, index: true },
+    link: { type: String },
   },
   { timestamps: true }
 );

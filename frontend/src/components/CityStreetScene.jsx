@@ -197,12 +197,14 @@ export const CityStreetScene = ({ isNight = false }) => (
       <ellipse cx="380" cy="24" rx="16" ry="9" fill="white"/>
     </g>
 
-    {/* Kite */}
-    <g className="kite" style={{transformOrigin:"680px 60px"}}>
-      <polygon points="680,44 696,60 680,76 664,60" fill="#ef4444" opacity="0.9"/>
-      <polygon points="680,44 696,60 680,60" fill="#fca5a5" opacity="0.7"/>
-      <path d="M680 76 Q685 88 682 100" stroke="#7c3aed" strokeWidth="1.2" fill="none" strokeDasharray="3,2"/>
-    </g>
+    {/* Kite (Light Mode Only) */}
+    {!isNight && (
+      <g className="kite" style={{transformOrigin:"680px 60px"}}>
+        <polygon points="680,44 696,60 680,76 664,60" fill="#ef4444" opacity="0.9"/>
+        <polygon points="680,44 696,60 680,60" fill="#fca5a5" opacity="0.7"/>
+        <path d="M680 76 Q685 88 682 100" stroke="#7c3aed" strokeWidth="1.2" fill="none" strokeDasharray="3,2"/>
+      </g>
+    )}
 
     {/* ── BUILDINGS (back row) - Brighter windows and higher contrast ── */}
     {/* B1 - tall cyan */}

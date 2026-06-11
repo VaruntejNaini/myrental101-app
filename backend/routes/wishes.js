@@ -10,7 +10,16 @@ const router = express.Router();
 // Helper to push automated notifications
 async function createNotification(userId, type, title, message) {
   try {
-    await Notification.create({ user: userId, type, title, message });
+    let newType = "SYSTEM";
+    if (["WISH_OFFER_RECEIVED", "OFFER_ACCEPTED"].includes(type)) {
+      newType = "NEGOTIATION";
+    }
+    const notif = new Notification({
+      recipient: userId,
+      message: `${title}: ${message}`,
+      type: newType
+    });
+    await notif.save();
   } catch (err) {
     console.error("Notification creation failed:", err);
   }

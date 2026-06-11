@@ -17,12 +17,11 @@ export default function ProductDetailPage() {
   const [auction, setAuction] = useState(null);
   const [duration, setDuration] = useState(3);
   const [bidAmount, setBidAmount] = useState("");
-  const [negotiatedRate, setNegotiatedRate] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [activeTab, setActiveTab] = useState("Product information");
   const [loading, setLoading] = useState(true);
   const [similarProducts, setSimilarProducts] = useState([]);
-  const [showNegotiationForm, setShowNegotiationForm] = useState(false);
+  const [isNegotiationModalOpen, setIsNegotiationModalOpen] = useState(false);
 
   const [userCoords, setUserCoords] = useState(null);
   const [coordsLoading, setCoordsLoading] = useState(true);
@@ -85,27 +84,30 @@ export default function ProductDetailPage() {
     }
   }, [product, id]);
 
+  useEffect(() => {
+    if (!isNegotiationModalOpen) return;
+    const timer = setTimeout(() => {
+      setIsNegotiationModalOpen(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [isNegotiationModalOpen]);
+
   const triggerToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const handleNegotiateSubmit = async (e) => {
-    e.preventDefault();
-    if (!negotiatedRate) return;
+  const handleNegotiateClick = async () => {
     try {
-      const res = await API.post("/rent/negotiate", {
+      await API.post("/rent/negotiate", {
         productId: id,
         startDate: new Date(),
         endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
-        dailyRate: Number(negotiatedRate),
-        securityDeposit: Math.round(Number(negotiatedRate) * 2.5)
+        dailyRate: product.rentalPrice,
+        securityDeposit: product.securityDeposit
       });
-      triggerToast(`Offer of ₹${negotiatedRate}/day submitted! Waiting for owner's response.`);
-      setNegotiatedRate("");
-      
-      // Navigate to tracker/dashboard to manage requests
-      setTimeout(() => navigate(`/orders`), 2500);
+      window.dispatchEvent(new Event("refreshNotificationCount"));
+      setIsNegotiationModalOpen(true);
     } catch (err) {
       triggerToast(err.response?.data?.msg || "Negotiation request failed");
     }
@@ -298,33 +300,13 @@ export default function ProductDetailPage() {
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => setShowNegotiationForm(!showNegotiationForm)}
+                  onClick={handleNegotiateClick}
                   className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all cursor-pointer border flex items-center justify-center gap-2 ${
                     isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600"
                   }`}
                 >
                   💬 Propose Custom Price Negotiation
                 </button>
-
-                {showNegotiationForm && (
-                  <div className="p-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 animate-fade-in">
-                    <label className="block text-xs font-black uppercase text-slate-400 mb-2">Propose your price</label>
-                    <form onSubmit={handleNegotiateSubmit} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={negotiatedRate}
-                        onChange={(e) => setNegotiatedRate(e.target.value)}
-                        placeholder="Offer price per day (e.g. 350)"
-                        className={`flex-1 px-3 py-2.5 border rounded-xl focus:outline-none text-xs ${
-                          isNight ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-white border-slate-200 focus:border-indigo-400"
-                        }`}
-                      />
-                      <button type="submit" className="bg-indigo-500 hover:bg-indigo-650 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors">
-                        Submit Offer
-                      </button>
-                    </form>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -440,6 +422,20 @@ export default function ProductDetailPage() {
           <span className="text-indigo-400 font-black">🔔 Alert:</span>
           <span>{toastMessage}</span>
           <button onClick={() => setToastMessage("")} className="ml-3 text-slate-400 hover:text-white font-extrabold cursor-pointer">✕</button>
+        </div>
+      )}
+
+      {/* Premium Center-Popped Notification Modal */}
+      {isNegotiationModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-md flex items-center justify-center animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center w-80 h-80 aspect-square border border-gray-100 dark:border-zinc-800">
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/50 rounded-full flex items-center justify-center mb-4 text-2xl">
+              📩
+            </div>
+            <p className="text-slate-800 dark:text-white font-bold text-sm leading-relaxed px-2">
+              Negotiation request sent to {product.owner?.name || "owner"}. You'll receive a push alert once reviewed!
+            </p>
+          </div>
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import NotificationBell from "../components/NotificationBell";
 
 export default function SavedPage() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function SavedPage() {
       
       {/* Header */}
       <div className="max-w-6xl mx-auto mb-8 flex flex-wrap justify-between items-center gap-4">
-        <div>
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate("/dashboard")}
             className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
@@ -37,6 +38,7 @@ export default function SavedPage() {
           >
             ← Back to Home
           </button>
+          <NotificationBell isNight={isNight} />
         </div>
         <div className="text-center md:text-right">
           <h1 className="text-2xl md:text-4xl font-black tracking-tight" style={{ fontFamily: "'Playfair Display', serif" }}>

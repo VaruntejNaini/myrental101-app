@@ -5,12 +5,7 @@ const productSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true, index: true },
     description: { type: String, required: true },
     category: { type: String, required: true, index: true },
-    images: [
-      {
-        url: { type: String, required: true },
-        publicId: { type: String, default: null }
-      }
-    ],
+    images: { type: [String], default: [] },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     rentalPrice: { type: Number, required: true },
     securityDeposit: { type: Number, required: true },

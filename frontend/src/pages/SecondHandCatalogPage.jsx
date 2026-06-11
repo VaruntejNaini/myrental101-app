@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import NotificationBell from "../components/NotificationBell";
 import PostProductModal from "../components/PostProductModal";
 
 const getImageUrl = (image) => {
@@ -110,7 +111,7 @@ export default function SecondHandCatalogPage() {
       
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-6 flex justify-between items-center flex-wrap gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate("/dashboard")}
             className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
@@ -125,6 +126,7 @@ export default function SecondHandCatalogPage() {
           >
             + Sell an Item
           </button>
+          <NotificationBell isNight={isNight} />
         </div>
         <div>
           <h1 className="text-xl md:text-3xl font-black text-right">🤝 Second-Hand Purchase Hub</h1>

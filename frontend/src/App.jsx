@@ -1,3 +1,4 @@
+import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -14,6 +15,17 @@ import ProductDetailPage from "./pages/ProductDetailPage";
 import AddressManagement from "./pages/AddressManagement";
 
 function App() {
+  useEffect(() => {
+    const isNight = localStorage.getItem("theme") === "night";
+    if (isNight) {
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.style.colorScheme = "light";
+    }
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

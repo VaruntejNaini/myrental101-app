@@ -11,9 +11,17 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
   const [area, setArea] = useState("");
   const [description, setDescription] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]); // Array of raw File objects
+  const [previewUrls, setPreviewUrls] = useState([]); // Array of Object URLs for display
   const [showDepositInfo, setShowDepositInfo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Clean up object URLs on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   // Auto-calculate default security deposit when rental price changes
   useEffect(() => {
@@ -26,14 +34,21 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
 
   if (!isOpen) return null;
 
+  const handleClose = () => {
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    setSelectedFiles([]);
+    setPreviewUrls([]);
+    setError("");
+    onClose();
+  };
+
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     if (!files || files.length === 0) return;
 
-    if (files.length > 5) {
+    if (selectedFiles.length + files.length > 5) {
       setError("You can upload a maximum of 5 images.");
-      setSelectedFiles([]);
-      e.target.value = null;
+      e.target.value = "";
       return;
     }
 
@@ -41,20 +56,29 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     for (const file of files) {
       if (!file.type.startsWith("image/")) {
         setError("Only image files are allowed.");
-        setSelectedFiles([]);
-        e.target.value = null;
+        e.target.value = "";
         return;
       }
       if (file.size > MAX_SIZE) {
         setError(`File "${file.name}" exceeds the 5MB size limit.`);
-        setSelectedFiles([]);
-        e.target.value = null;
+        e.target.value = "";
         return;
       }
     }
 
     setError("");
-    setSelectedFiles(files);
+    const newPreviews = files.map(file => URL.createObjectURL(file));
+    setSelectedFiles((prev) => [...prev, ...files]);
+    setPreviewUrls((prev) => [...prev, ...newPreviews]);
+    e.target.value = ""; // Reset value to allow selecting same file/triggering change
+  };
+
+  const removeImage = (indexToRemove) => {
+    if (previewUrls[indexToRemove]) {
+      URL.revokeObjectURL(previewUrls[indexToRemove]);
+    }
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setPreviewUrls((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSubmit = async (e) => {
@@ -79,20 +103,22 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
       formData.append("productType", productType);
 
       selectedFiles.forEach((file) => {
-        formData.append("images", file);
+        formData.append("productImages", file);
       });
 
       await API.post("/rent/products", formData);
 
       setIsSubmitting(false);
       
-      // Reset state
+      // Reset state and revoke URLs
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
       setTitle("");
       setRentalPrice("");
       setSecurityDeposit("");
       setArea("");
       setDescription("");
       setSelectedFiles([]);
+      setPreviewUrls([]);
       
       if (onProductCreated) onProductCreated();
       onClose();
@@ -111,7 +137,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
       >
         {/* Close Button */}
         <button 
-          onClick={onClose} 
+          onClick={handleClose} 
           className="absolute top-4 right-4 text-xl font-bold hover:text-indigo-500 cursor-pointer"
         >
           ✕
@@ -280,28 +306,52 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
 
           {/* Product Image File Upload */}
           <div>
-            <label className="block mb-1.5 uppercase tracking-wider text-slate-400 text-[9px] font-black">Product Images (Max 5)</label>
-            <div className="flex flex-col gap-4">
+            <label className="block mb-1.5 uppercase tracking-wider text-slate-400 text-[9px] font-black">
+              Product Images ({selectedFiles.length}/5)
+            </label>
+            <div className="flex flex-wrap gap-4 p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/20">
+              
+              {/* Thumbnail Previews */}
+              {previewUrls.map((url, idx) => (
+                <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow group">
+                  <img 
+                    src={url} 
+                    alt={`Preview ${idx + 1}`} 
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105" 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => removeImage(idx)} 
+                    className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black cursor-pointer shadow-md transition-all z-10"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+
+              {/* Add Photo Button (only shows if total < 5) */}
+              {selectedFiles.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("product-image-upload").click()}
+                  className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 bg-slate-100/50 dark:bg-slate-900/50 hover:bg-indigo-500/5 dark:hover:bg-indigo-500/5 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-indigo-400 cursor-pointer gap-1.5"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="text-[9px] font-black uppercase tracking-wider">Add Photo</span>
+                </button>
+              )}
+
+              {/* Hidden file input */}
               <input 
+                id="product-image-upload"
                 type="file" 
                 accept="image/*"
                 multiple
                 onChange={handleImageChange}
-                className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:cursor-pointer"
+                className="hidden"
               />
-              {selectedFiles.length > 0 && (
-                <div className="flex gap-2 flex-wrap mt-2">
-                  {selectedFiles.map((file, idx) => (
-                    <div key={idx} className="relative group">
-                      <img 
-                        src={URL.createObjectURL(file)} 
-                        alt={`Preview ${idx + 1}`} 
-                        className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-slate-800 shadow" 
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 

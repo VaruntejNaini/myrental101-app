@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #F4E8D6 !important;
+  color: #1e293b;
+}
+
+/* Cross-browser scrollbar hiding */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.goog-te-combo {
+  background-color: black;
+  color: white;
+  padding: 6px;
+  border-radius: 8px;
+}
+.goog-logo-link {
+  display: none !important;
+}
+
+.goog-te-gadget {
+  color: transparent !important;
+}
+.goog-te-gadget {
+  display: none !important;
+}
+
+.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0px !important;
+}
+
+html, body {
+  margin-top: 0px !important;
+}
+
+/* Optional styling for dropdown */
+.goog-te-combo {
+  background-color: black;
+  color: white;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+@keyframes redBorderMotion {
+  0% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); }
+  50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+  100% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); }
+}
+
+.card-border-motion {
+  animation: redBorderMotion 2s infinite ease-in-out;
+  border-width: 2px;
+  border-style: solid;
+}

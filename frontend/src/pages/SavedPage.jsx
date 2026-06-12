@@ -32,7 +32,7 @@ export default function SavedPage() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate("/dashboard")}
-            className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+            className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer hover:scale-[1.05] active:scale-95 ${
               isNight ? "bg-slate-900 border border-slate-800 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100"
             }`}
           >
@@ -90,30 +90,42 @@ export default function SavedPage() {
                   {/* Remove Button */}
                   <button 
                     onClick={() => handleRemove(item.id)}
-                    className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-slate-950/60 hover:bg-red-500/80 text-white flex items-center justify-center text-sm shadow transition-colors cursor-pointer"
+                    className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow transition-all duration-300 scale-110 cursor-pointer"
                     title="Remove Bookmark"
                   >
-                    ✕
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4.5 h-4.5">
+                      <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
+                    </svg>
                   </button>
 
-                  <div className={`h-40 flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 ${
+                  <div className={`h-40 relative flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 overflow-hidden ${
                     isNight ? "bg-gradient-to-br from-slate-800 to-slate-950" : "bg-gradient-to-br from-indigo-50 to-violet-50"
                   }`}>
-                    {item.emoji}
+                    {item.images && item.images.length > 0 ? (
+                      <img 
+                        src={typeof item.images[0] === "string" ? item.images[0] : item.images[0]?.url || ""} 
+                        alt={item.title} 
+                        className="w-full h-full object-contain p-3" 
+                      />
+                    ) : (
+                      <span className="select-none">
+                        {item.emoji || (item.title?.toLowerCase().includes("camera") ? "📷" : item.title?.toLowerCase().includes("scooter") || item.title?.toLowerCase().includes("activa") ? "🛵" : item.title?.toLowerCase().includes("playstation") || item.title?.toLowerCase().includes("ps5") ? "🎮" : "📦")}
+                      </span>
+                    )}
                   </div>
 
                   <div className="p-5">
                     <h3 className={`font-black text-sm mb-1 truncate ${isNight ? "text-slate-100" : "text-slate-800"}`}>{item.title}</h3>
                     
                     <div className="flex items-center gap-1.5 mb-3 text-[11px] text-slate-400 font-semibold">
-                      <span>👤 {item.owner}</span>
+                      <span>👤 {item.owner?.name || item.owner || "Local Owner"}</span>
                       <span>•</span>
-                      <span>📍 {item.distance}</span>
+                      <span>📍 {item.area || item.distance || "Local"}</span>
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/60">
                       <span className="text-violet-500 font-black text-base">
-                        ₹{item.price}
+                        ₹{item.price || item.rentalPrice || "N/A"}
                         <span className="text-[10px] text-slate-400 font-normal">/{item.unit || "day"}</span>
                       </span>
                       

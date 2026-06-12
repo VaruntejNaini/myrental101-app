@@ -1,10 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../api";
 
 export default function Profile() {
   const navigate = useNavigate();
   const [isNight, setIsNight] = useState(() => localStorage.getItem("theme") === "night");
   const [profilePic, setProfilePic] = useState(() => localStorage.getItem("userProfilePic") || "");
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
+  const [userEmail, setUserEmail] = useState(() => localStorage.getItem("pendingEmail") || "varun@example.com");
+
+  useEffect(() => {
+    const activeToken = localStorage.getItem("token");
+    if (activeToken) {
+      API.get("/auth/me")
+        .then(res => {
+          if (res.data?.name) {
+            setUserName(res.data.name);
+            localStorage.setItem("user_name", res.data.name);
+          }
+          if (res.data?.email) {
+            setUserEmail(res.data.email);
+          }
+        })
+        .catch(err => console.error("Error loading profile:", err));
+    }
+  }, []);
+
   const [expandedRental, setExpandedRental] = useState(null);
   const [expandedLending, setExpandedLending] = useState(null);
   const [expandedHistory, setExpandedHistory] = useState(null);
@@ -96,7 +117,7 @@ export default function Profile() {
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-800/10">
           <button 
             onClick={() => navigate("/dashboard")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs border transition-all cursor-pointer ${isNight ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white" : "bg-white border-indigo-50 text-slate-650 hover:text-indigo-650 shadow-sm"}`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs border transition-all duration-200 cursor-pointer hover:scale-[1.05] active:scale-95 ${isNight ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white" : "bg-white border-indigo-50 text-slate-650 hover:text-indigo-650 shadow-sm"}`}
           >
             ← Back to Home
           </button>
@@ -129,9 +150,9 @@ export default function Profile() {
             >
               <div className="w-28 h-28 rounded-3xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-extrabold text-3xl shadow-xl overflow-hidden transition-all duration-300 border-2 border-indigo-500/30 group-hover/avatar:border-indigo-400">
                 {profilePic ? (
-                  <img src={profilePic} alt="Varun Tej" className="w-full h-full object-cover" />
+                  <img src={profilePic} alt={userName} className="w-full h-full object-cover" />
                 ) : (
-                  "VT"
+                  userName ? userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "VT"
                 )}
               </div>
               
@@ -144,7 +165,7 @@ export default function Profile() {
 
             <div className="flex-1 text-center md:text-left">
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
-                <h3 className="text-2xl font-black tracking-tight text-indigo-400">Varun Tej</h3>
+                <h3 className="text-2xl font-black tracking-tight text-indigo-400">{userName}</h3>
                 {/* Flair Status Badge */}
                 <div className="relative group/badge">
                   <span className="text-xs bg-indigo-500/15 text-indigo-400 font-bold px-2.5 py-1 rounded-lg border border-indigo-500/20 cursor-help transition-all duration-200 hover:bg-indigo-500/25">

@@ -171,11 +171,20 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
             e.stopPropagation();
             onBookmarkToggle(item);
           }}
-          className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow transition-all cursor-pointer ${
-            isBookmarked ? "bg-indigo-600 text-white" : "bg-slate-900/60 text-white hover:bg-indigo-500"
+          className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow transition-all cursor-pointer ${
+            isBookmarked ? "bg-red-500 text-white hover:bg-red-600 scale-110" : "bg-slate-900/60 text-white hover:bg-indigo-500"
           }`}
+          title={isBookmarked ? "Remove Bookmark" : "Bookmark Item"}
         >
-          🔖
+          {isBookmarked ? (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4.5 h-4.5">
+              <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4.5 h-4.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+            </svg>
+          )}
         </button>
       )}
 
@@ -184,7 +193,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         isNight ? "bg-gradient-to-br from-slate-800 to-slate-950" : "bg-gradient-to-br from-indigo-50 to-violet-50"
       }`}>
         {images.length > 0 ? (
-          <img src={getImageUrl(images[imgIndex])} alt={item.title} className="w-full h-full object-cover" />
+          <img src={getImageUrl(images[imgIndex])} alt={item.title} className="w-full h-full object-contain p-3" />
         ) : (
           <span className="select-none">{item.emoji}</span>
         )}
@@ -293,7 +302,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
                 )}
               </div>
               <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
-                {item.rowType === "Second-Hand" ? "Buy Out" : "Rent Flow"}
+                {item.rowType === "Second-Hand" ? "Buy Out" : item.rowType === "Wishlist" ? "Offer" : "Rent Flow"}
               </button>
             </>
           )}
@@ -313,6 +322,21 @@ export default function Dashboard() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
+
+  useEffect(() => {
+    const activeToken = localStorage.getItem("token");
+    if (activeToken) {
+      API.get("/auth/me")
+        .then(res => {
+          if (res.data?.name) {
+            setUserName(res.data.name);
+            localStorage.setItem("user_name", res.data.name);
+          }
+        })
+        .catch(err => console.error("Error loading user profile:", err));
+    }
+  }, []);
 
   const [userCoords, setUserCoords] = useState(null);
   const [coordsLoading, setCoordsLoading] = useState(true);
@@ -475,14 +499,25 @@ export default function Dashboard() {
 
   const handleBookmarkToggle = (item) => {
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    const isBookmarked = bookmarkedIds.includes(item.id);
+    const isBookmarked = bookmarkedIds.includes(item.id || item._id);
 
     let updated = [];
     if (isBookmarked) {
-      updated = existing.filter(x => x.id !== item.id);
+      updated = existing.filter(x => x.id !== (item.id || item._id));
       triggerToast(`Removed "${item.title}" from saved bookmarks!`);
     } else {
-      updated = [...existing, item];
+      const normalizedItem = {
+        id: item.id || item._id,
+        title: item.title,
+        price: item.price || item.rentalPrice || item.budget,
+        unit: item.unit || "day",
+        owner: typeof item.owner === "object" ? item.owner?.name : (item.owner || "Local Owner"),
+        area: item.area || item.distance || "Local",
+        images: item.images || [],
+        emoji: item.emoji || (item.title?.toLowerCase().includes("camera") ? "📷" : item.title?.toLowerCase().includes("scooter") || item.title?.toLowerCase().includes("activa") ? "🛵" : item.title?.toLowerCase().includes("playstation") || item.title?.toLowerCase().includes("ps5") ? "🎮" : "📦"),
+        rowType: item.rowType || item.badge || "Saved"
+      };
+      updated = [...existing, normalizedItem];
       triggerToast(`Saved "${item.title}" to bookmarks! 🔖`);
     }
 
@@ -652,6 +687,7 @@ export default function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     setSidePanelOpen(false);
+    setMyProducts([]);
     triggerToast("Logged out successfully. Authentication wiped!");
   };
 
@@ -664,8 +700,8 @@ export default function Dashboard() {
   ];
 
   const rowListedItems = [
-    { id: "l-1", title: "Specialized Carbon Road Bike", price: 600, emoji: "🚴", owner: "Varun Tej (You)", distance: "0.0 km away", badge: "Active" },
-    { id: "l-2", title: "MacBook Pro 14\" M3 Max", price: 800, emoji: "💻", owner: "Varun Tej (You)", distance: "0.0 km away", badge: "Pending Deal" }
+    { id: "l-1", title: "Specialized Carbon Road Bike", price: 600, emoji: "🚴", owner: `${userName} (You)`, distance: "0.0 km away", badge: "Active" },
+    { id: "l-2", title: "MacBook Pro 14\" M3 Max", price: 800, emoji: "💻", owner: `${userName} (You)`, distance: "0.0 km away", badge: "Pending Deal" }
   ];
 
   const rowSecondHandItems = [
@@ -781,7 +817,7 @@ export default function Dashboard() {
                   ) : (
                     <span className="text-lg">👤</span>
                   )}
-                  <span className={`text-xs font-black mr-1 hidden sm:inline ${isNight ? "text-slate-200" : "text-slate-800"}`}>Varun Tej</span>
+                  <span className={`text-xs font-black mr-1 hidden sm:inline ${isNight ? "text-slate-200" : "text-slate-800"}`}>{userName}</span>
                   <span className="text-[10px] text-slate-400">▼</span>
                 </button>
                 {profileDropdownOpen && (
@@ -806,6 +842,14 @@ export default function Dashboard() {
                         }`}
                       >
                         <span>📦</span> My Orders
+                      </button>
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); navigate("/saved"); }}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-black transition-colors flex items-center gap-2 ${
+                          isNight ? "hover:bg-slate-800 text-slate-200 hover:text-indigo-400" : "hover:bg-indigo-50 text-slate-700 hover:text-indigo-650"
+                        }`}
+                      >
+                        <span>🔖</span> Saved Items
                       </button>
                       <div className={`border-t my-1 ${isNight ? "border-slate-800" : "border-slate-100"}`}></div>
                       <button
@@ -972,7 +1016,7 @@ export default function Dashboard() {
             <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               📦 Items You Are Listing
             </h2>
-            <button onClick={() => navigate("/orders")} className="text-xs font-black text-indigo-500 hover:underline">
+            <button onClick={() => navigate(isLoggedIn ? "/orders" : "/login")} className="text-xs font-black text-indigo-500 hover:underline">
               Manage Orders
             </button>
           </div>
@@ -993,9 +1037,29 @@ export default function Dashboard() {
                 onDeleteProduct={handleDeleteProduct}
               />
             ))}
-            {myProducts.length === 0 && (
-              <p className="text-xs text-slate-400 p-4">You haven't listed any items yet. Create a listing to get started!</p>
-            )}
+            
+            {/* Permanent Add Listing Tile */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isLoggedIn) {
+                  setPostModalOpen(true);
+                } else {
+                  navigate("/login");
+                }
+              }}
+              className="flex-shrink-0 w-[280px] sm:w-[320px] h-[380px] sm:h-[400px] rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 bg-slate-100/50 dark:bg-slate-900/10 hover:bg-indigo-500/5 dark:hover:bg-indigo-500/5 transition-all flex flex-col items-center justify-center text-slate-450 hover:text-indigo-400 cursor-pointer gap-2.5 shadow-sm"
+            >
+              <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <div className="text-center px-4">
+                <span className="text-[12px] font-black uppercase tracking-wider block">Add New Listing</span>
+                <span className="text-[10px] text-slate-450 block mt-0.5">Rent or sell another item in your catalog</span>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -1043,7 +1107,7 @@ export default function Dashboard() {
             {dbWishes.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0 }} 
+                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0, rowType: "Wishlist" }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}

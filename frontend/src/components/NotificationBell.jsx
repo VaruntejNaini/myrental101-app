@@ -18,9 +18,13 @@ export default function NotificationBell({ isNight }) {
   useEffect(() => {
     fetchUnreadCount();
 
+    // Poll notifications every 5 seconds
+    const intervalId = setInterval(fetchUnreadCount, 5000);
+
     // Listen to custom refresh events
     window.addEventListener("refreshNotificationCount", fetchUnreadCount);
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener("refreshNotificationCount", fetchUnreadCount);
     };
   }, []);

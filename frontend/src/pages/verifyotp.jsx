@@ -97,6 +97,9 @@ function VerifyOtp() {
         if (res.data.token) {
           localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
         }
+        if (res.data.user?.name) {
+          localStorage.setItem("user_name", res.data.user.name);
+        }
         navigate("/dashboard");
       }
     } catch (err) {

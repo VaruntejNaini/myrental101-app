@@ -374,7 +374,7 @@ export default function AddressManagement() {
       <div className="max-w-4xl mx-auto mb-8 flex flex-wrap justify-between items-center gap-4 border-b pb-6 border-slate-200 dark:border-slate-800">
         <button 
           onClick={() => navigate("/dashboard")}
-          className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 text-sm font-extrabold px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer hover:scale-[1.05] active:scale-95 ${
             isNight ? "bg-slate-900 border border-slate-800 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100"
           }`}
         >

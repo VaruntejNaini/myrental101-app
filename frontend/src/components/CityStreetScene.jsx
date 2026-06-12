@@ -115,10 +115,10 @@ export const CityStreetScene = ({ isNight = false }) => (
         .banner { animation: bannerFlap 2s ease-in-out infinite; transform-box:fill-box; transform-origin:left center; }
 
         /* Traffic light blink */
-        @keyframes lightGreen { 0%,40%{opacity:1} 50%,100%{opacity:0.2} }
-        @keyframes lightRed   { 0%,40%{opacity:0.2} 50%,100%{opacity:1} }
-        .tl-green { animation: lightGreen 4s step-end infinite; }
-        .tl-red   { animation: lightRed 4s step-end infinite; }
+        @keyframes lightGreen  { 0%,40%{opacity:1} 50%,100%{opacity:0.25} }
+        @keyframes lightYellow { 0%,40%{opacity:0.25} 50%,100%{opacity:1} }
+        .tl-green  { animation: lightGreen 4s step-end infinite; }
+        .tl-yellow { animation: lightYellow 4s step-end infinite; }
 
         /* Kite float */
         @keyframes kiteDrift { 0%,100%{transform:translate(0,0) rotate(-8deg)} 50%{transform:translate(10px,-12px) rotate(8deg)} }
@@ -315,9 +315,13 @@ export const CityStreetScene = ({ isNight = false }) => (
     </g>
 
     {/* ── TRAFFIC LIGHT ── */}
+    <rect x="724" y="170" width="4" height="80" fill="#000000" />
     <rect x="720" y="120" width="12" height="50" rx="2" fill="#1e1b4b" opacity="0.9"/>
-    <rect x="722" y="125" width="8" height="8" rx="4" fill="#fbbf24" className="tl-red" opacity="0.9"/>
-    <rect x="722" y="140" width="8" height="8" rx="4" fill="#22c55e" className="tl-green"/>
+    {/* Static unlit/dim red light */}
+    <rect x="722" y="124" width="8" height="8" rx="4" fill="#ef4444" opacity="0.3"/>
+    {/* Alternating glowing yellow and green lights */}
+    <rect x="722" y="134" width="8" height="8" rx="4" fill="#eab308" className="tl-yellow"/>
+    <rect x="722" y="144" width="8" height="8" rx="4" fill="#22c55e" className="tl-green"/>
     <text x="715" y="185" fontSize="6" fill={isNight ? "#9ca3af" : "#f3f4f6"} fontWeight="bold">Traffic</text>
 
     {/* ── VEHICLES (animated) - Brighter tones ── */}

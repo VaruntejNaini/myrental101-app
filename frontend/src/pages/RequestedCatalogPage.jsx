@@ -109,7 +109,7 @@ export default function RequestedCatalogPage() {
       
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-6 flex justify-between items-center flex-wrap gap-4 border-b pb-4 border-slate-800">
-        <button onClick={() => navigate("/dashboard")} className="bg-slate-900 border border-slate-800 text-xs px-4 py-2.5 rounded-xl text-white">
+        <button onClick={() => navigate("/dashboard")} className="bg-slate-900 border border-slate-800 text-xs px-4 py-2.5 rounded-xl text-white cursor-pointer transition-all duration-200 hover:scale-[1.05] active:scale-95 hover:bg-slate-800">
           ← Back to Discovery
         </button>
         <h1 className="text-xl md:text-3xl font-black">📢 Crowd-Sourced Wishlist Requests</h1>
@@ -126,23 +126,26 @@ export default function RequestedCatalogPage() {
             <form onSubmit={handleCreateWish} className="space-y-3 text-xs">
               <div>
                 <label className="block mb-1">Item Title Needed</label>
-                <input type="text" value={newWishTitle} onChange={(e) => setNewWishTitle(e.target.value)} placeholder="e.g. High capacity generator" className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl" />
+                <input type="text" value={newWishTitle} onChange={(e) => setNewWishTitle(e.target.value)} placeholder="e.g. High capacity generator" className={`w-full px-3 py-2 rounded-xl border focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`} />
               </div>
               <div>
                 <label className="block mb-1">Description / Requirements</label>
-                <textarea value={newWishDesc} onChange={(e) => setNewWishDesc(e.target.value)} placeholder="Condition details, specific date parameters..." className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl resize-none" rows={3} />
+                <textarea value={newWishDesc} onChange={(e) => setNewWishDesc(e.target.value)} placeholder="Condition details, specific date parameters..." className={`w-full px-3 py-2 rounded-xl border resize-none focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`} rows={3} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block mb-1">Max Budget (₹/day)</label>
-                  <input type="number" value={newWishBudget} onChange={(e) => setNewWishBudget(e.target.value)} placeholder="₹2000" className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl" />
+                  <input type="number" value={newWishBudget} onChange={(e) => setNewWishBudget(e.target.value)} placeholder="₹2000" className={`w-full px-3 py-2 rounded-xl border focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`} />
                 </div>
                 <div>
                   <label className="block mb-1">Duration (Days)</label>
-                  <input type="number" value={newWishDuration} onChange={(e) => setNewWishDuration(e.target.value)} placeholder="3" className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl" />
+                  <input type="number" value={newWishDuration} onChange={(e) => setNewWishDuration(e.target.value)} placeholder="3" className={`w-full px-3 py-2 rounded-xl border focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`} />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-indigo-500 text-white font-bold py-2.5 rounded-xl mt-2">
+              <button 
+                type="submit" 
+                className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl mt-2 cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 shadow-md flex items-center justify-center gap-2"
+              >
                 Broadcast Wish
               </button>
             </form>
@@ -151,8 +154,8 @@ export default function RequestedCatalogPage() {
           {/* Filters */}
           <div className={`p-6 rounded-2xl border ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-205"}`}>
             <h3 className="font-extrabold text-sm mb-4 uppercase text-indigo-400">Filter Wishes</h3>
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search wishlist title..." className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl mb-4" />
-            <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs mb-4">
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search wishlist title..." className={`w-full px-3 py-2 text-xs rounded-xl border mb-4 focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`} />
+            <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className={`w-full px-3 py-2 rounded-xl border text-xs mb-4 focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white caret-white" : "bg-white border-slate-300 text-black caret-black"}`}>
               <option value="All">All Categories</option>
               <option value="Electronics">Electronics</option>
               <option value="Tools">Tools</option>
@@ -178,26 +181,26 @@ export default function RequestedCatalogPage() {
                     <p>Duration: <strong>{wish.durationDays} Days</strong></p>
                   </div>
 
-                  {/* Submit Pitch Offer Quote */}
+                  {/* Submit Offer Quote */}
                   <div className="space-y-2 mb-4">
-                    <span className="text-[10px] font-bold uppercase text-slate-400">Submit Pitch Proposal</span>
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Submit Offer Proposal</span>
                     <div className="flex gap-2">
                       <input
                         type="number"
                         placeholder="Quote ₹/day"
                         value={pitchAmount[wish._id] || ""}
                         onChange={(e) => setPitchAmount(prev => ({ ...prev, [wish._id]: e.target.value }))}
-                        className="w-24 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs"
+                        className={`w-24 px-3 py-2 rounded-xl border text-xs focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`}
                       />
                       <input
                         type="text"
                         placeholder="Condition / details"
                         value={pitchDetails[wish._id] || ""}
                         onChange={(e) => setPitchDetails(prev => ({ ...prev, [wish._id]: e.target.value }))}
-                        className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs"
+                        className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`}
                       />
                       <button onClick={() => handlePitchQuote(wish._id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-2 rounded-xl">
-                        Pitch
+                        Offer
                       </button>
                     </div>
                   </div>

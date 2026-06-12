@@ -106,7 +106,6 @@ export default function ProductDetailPage() {
         dailyRate: product.rentalPrice,
         securityDeposit: product.securityDeposit
       });
-      window.dispatchEvent(new Event("refreshNotificationCount"));
       setIsNegotiationModalOpen(true);
     } catch (err) {
       triggerToast(err.response?.data?.msg || "Negotiation request failed");
@@ -192,7 +191,7 @@ export default function ProductDetailPage() {
       <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
         <button 
           onClick={() => navigate("/dashboard")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer hover:scale-[1.05] active:scale-95 ${
             isNight ? "bg-slate-900 border border-slate-800 hover:bg-slate-800" : "bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"
           }`}
         >

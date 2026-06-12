@@ -10,6 +10,21 @@ export default function MyOrders() {
 
   const [activeRentals, setActiveRentals] = useState([]);
   const [activeBorrowRequests, setActiveBorrowRequests] = useState([]);
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
+
+  useEffect(() => {
+    const activeToken = localStorage.getItem("token");
+    if (activeToken) {
+      API.get("/auth/me")
+        .then(res => {
+          if (res.data?.name) {
+            setUserName(res.data.name);
+            localStorage.setItem("user_name", res.data.name);
+          }
+        })
+        .catch(err => console.error("Error loading profile:", err));
+    }
+  }, []);
   
   // OTP generator codes mapped by transaction ID
   const [generatedOtps, setGeneratedOtps] = useState({});
@@ -73,7 +88,7 @@ export default function MyOrders() {
         status: "RESERVED",
         startDate: "12 June",
         endDate: "15 June",
-        borrower: { name: "Varun Tej" },
+        borrower: { name: userName },
         owner: { name: "Arjun K." }
       },
       {
@@ -83,11 +98,11 @@ export default function MyOrders() {
         status: "IN_POSSESSION",
         startDate: "08 June",
         endDate: "10 June",
-        borrower: { name: "Varun Tej" },
+        borrower: { name: userName },
         owner: { name: "Rahul P." }
       }
     ]);
-  }, []);
+  }, [userName]);
 
   const handleGenerateOtp = async (txId, type) => {
     try {

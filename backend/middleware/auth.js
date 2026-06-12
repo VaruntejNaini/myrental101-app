@@ -5,7 +5,7 @@ export const verifyToken = (req, res, next) => {
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(403).json({ msg: "No token provided, authorization denied" });
+    return res.status(403).json({ msg: "umm! we can't identify you please register / login into our page first for using our platform" });
   }
 
   try {

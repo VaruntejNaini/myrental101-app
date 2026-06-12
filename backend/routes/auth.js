@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import { OAuth2Client } from "google-auth-library";
 
 import User from "../models/User.js";
+import { verifyToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -349,6 +350,7 @@ router.post("/verify-email-otp", async (req, res) => {
     res.json({
       msg: "Email verified successfully",
       token,
+      user
     });
 
   } catch (err) {
@@ -473,6 +475,19 @@ router.post("/google", async (req, res) => {
   } catch (err) {
     console.error("GOOGLE LOGIN ERROR:", err);
     res.status(500).json({ msg: "Google authentication failed" });
+  }
+});
+
+// GET CURRENT USER PROFILE
+router.get("/me", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
   }
 });
 

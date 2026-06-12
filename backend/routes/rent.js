@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import { verifyToken } from "../middleware/auth.js";
 import Product from "../models/Product.js";
 import Transaction from "../models/Transaction.js";
@@ -80,6 +81,21 @@ router.get("/products", async (req, res) => {
     if (search) {
       query.title = { $regex: search, $options: "i" };
     }
+
+    // Decode token optionally to exclude current user's products
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded && decoded.id) {
+          query.owner = { $ne: decoded.id };
+        }
+      } catch (err) {
+        // Invalid or expired token; ignore filtering by owner
+      }
+    }
+
     const products = await Product.find(query).populate("owner", "name email");
     res.json(products);
   } catch (err) {
@@ -131,6 +147,26 @@ router.get("/products/:id", async (req, res) => {
 
     const product = await Product.findById(req.params.id).populate("owner", "name email");
     if (!product) return res.status(404).json({ msg: "Product not found" });
+
+    // Enforce ownership checks for INACTIVE listings
+    if (product.status === "INACTIVE") {
+      const authHeader = req.headers["authorization"];
+      const token = authHeader && authHeader.split(" ")[1];
+      let requesterId = null;
+
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          requesterId = decoded.id;
+        } catch (err) {
+          // Token is invalid/expired, leave requesterId as null
+        }
+      }
+
+      if (!requesterId || product.owner._id.toString() !== requesterId) {
+        return res.status(403).json({ msg: "Access denied: This listing has been deactivated by the owner." });
+      }
+    }
     
     // Attach current active auction context if applicable
     let auction = null;

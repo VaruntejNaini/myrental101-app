@@ -30,6 +30,26 @@ export default function NotificationDrawer({ isOpen, onClose }) {
     };
   }, [isOpen]);
 
+  const handleResolveNegotiation = async (notifId, txId, action, otherUser = null, productTitle = "") => {
+    try {
+      await API.post(`/rent/negotiate/${txId}/resolve`, { action });
+      await handleMarkAsRead(notifId);
+      if (action === "ACCEPT" && otherUser) {
+        window.dispatchEvent(
+          new CustomEvent("openChatbox", {
+            detail: {
+              transactionId: txId,
+              otherUser: otherUser,
+              productTitle: productTitle || "Item"
+            }
+          })
+        );
+      }
+    } catch (err) {
+      console.error(`Error resolving negotiation (${action}):`, err);
+    }
+  };
+
   const handleMarkAsRead = async (id) => {
     try {
       await API.put(`/rent/notifications/${id}/read`);
@@ -64,7 +84,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
 
       {/* Drawer content */}
       <div
-        className="fixed top-0 right-0 h-full w-full sm:w-96 z-[130] bg-white dark:bg-zinc-900 border-l border-gray-205 dark:border-zinc-800 shadow-2xl flex flex-col transition-transform duration-300"
+        className="fixed top-0 right-0 h-full w-full sm:w-[480px] z-[130] bg-white dark:bg-zinc-900 border-l border-gray-205 dark:border-zinc-800 shadow-2xl flex flex-col transition-transform duration-300"
         style={{ fontFamily: "'Nunito', 'Poppins', sans-serif" }}
       >
         {/* Header */}
@@ -145,6 +165,81 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                   <p className="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-relaxed">
                     {notif.message}
                   </p>
+                  {(() => {
+                    const txMatch = notif.link ? notif.link.match(/tx=([^&#=]*)/) : null;
+                    const txId = notif.transactionId || (txMatch ? txMatch[1] : null);
+                    return (
+                      <>
+                        {notif.sender && (
+                          <div className="mt-2 p-3 rounded-xl bg-slate-900 dark:bg-black border border-slate-800/80 flex flex-col gap-2 shadow-inner">
+                            <div className="flex items-center justify-between gap-2 border-b border-slate-800/60 pb-1.5">
+                              <span className="text-xs font-black text-white flex items-center gap-1">
+                                👤 {notif.sender.name}
+                              </span>
+                              {notif.sender.isVerified ? (
+                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full flex items-center gap-0.5 border border-emerald-500/20">
+                                  ✓ Verified
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-black text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                  Unverified
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-100 flex flex-col gap-1 font-bold">
+                              {notif.sender.email && (
+                                <span className="truncate flex items-center gap-1.5 text-slate-200">
+                                  ✉️ {notif.sender.email}
+                                </span>
+                              )}
+                              {notif.sender.phone && (
+                                <span className="flex items-center gap-1.5 text-slate-200">
+                                  📞 {notif.sender.phone}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {txId && !notif.message.startsWith("Negotiation Rejected ❌") && (
+                          <div className="mt-3 flex flex-col gap-1.5">
+                            {notif.type === "NEGOTIATION" && !notif.message.startsWith("Negotiation Accepted 🎉") && (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleResolveNegotiation(notif._id, txId, "ACCEPT", notif.sender, notif.message)}
+                                  className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center"
+                                >
+                                  ACCEPT
+                                </button>
+                                <button
+                                  onClick={() => handleResolveNegotiation(notif._id, txId, "REJECT", notif.sender, notif.message)}
+                                  className="flex-1 py-1.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center"
+                                >
+                                  REJECT
+                                </button>
+                              </div>
+                            )}
+                            <button
+                              onClick={() => {
+                                window.dispatchEvent(
+                                  new CustomEvent("openChatbox", {
+                                    detail: {
+                                      transactionId: txId,
+                                      otherUser: notif.sender,
+                                      productTitle: notif.message || "Item"
+                                    }
+                                  })
+                                );
+                                onClose();
+                              }}
+                              className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
+                            >
+                              💬 CHAT NOW
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <span className="text-[9px] text-slate-400 dark:text-zinc-500 text-right">
                     {new Date(notif.createdAt).toLocaleTimeString([], {
                       hour: "2-digit",

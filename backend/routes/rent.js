@@ -40,7 +40,7 @@ async function checkOverlap(productId, start, end, session = null) {
 }
 
 // Helper to push automated notifications
-async function createNotification(userId, type, title, message, senderId = null, link = "", session = null) {
+async function createNotification(userId, type, title, message, senderId = null, link = "", transactionId = null, session = null) {
   try {
     let newType = "SYSTEM";
     if (["NEW_NEGOTIATION_OFFER", "OFFER_ACCEPTED", "NEW_BID", "OUTBID_ALERT"].includes(type)) {
@@ -54,7 +54,8 @@ async function createNotification(userId, type, title, message, senderId = null,
       sender: senderId,
       message: `${title}: ${message}`,
       type: newType,
-      link: link
+      link: link,
+      transactionId: transactionId
     });
     await notif.save({ session });
   } catch (err) {
@@ -351,9 +352,14 @@ router.post("/negotiate", verifyToken, async (req, res) => {
         endsAt: new Date(Date.now() + endsInHours * 60 * 60 * 1000)
       }], { session });
 
-      await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`, req.userId, `/product/${product._id}`, session);
+      await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`, req.userId, `/product/${product._id}`, null, session);
     } else {
-      await createNotification(product.owner, "NEW_NEGOTIATION_OFFER", "New Rental Negotiation", `You have received an offer for ${product.title}.`, req.userId, `/product/${product._id}`, session);
+      const isSecondHand = product.productType === "SECOND_HAND";
+      const title = isSecondHand ? "New Purchase Request" : "New Rental Negotiation";
+      const message = isSecondHand
+        ? `You have received a buyout request for "${product.title}" for ₹${dailyRate}.`
+        : `You have received an offer for ${product.title}.`;
+      await createNotification(product.owner, "NEW_NEGOTIATION_OFFER", title, message, req.userId, `/product/${product._id}?tx=${transaction._id}`, transaction._id, session);
     }
 
     await session.commitTransaction();
@@ -370,18 +376,23 @@ router.post("/negotiate", verifyToken, async (req, res) => {
 router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
   try {
     const { action, counterRate } = req.body; // 'ACCEPT', 'REJECT', 'COUNTER'
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findById(req.params.id).populate("product");
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
     if (transaction.status !== "PENDING_NEGOTIATION") {
       return res.status(400).json({ msg: "Transaction not in negotiation state" });
     }
 
+    const isSecondHand = transaction.product?.productType === "SECOND_HAND";
+
     if (action === "ACCEPT") {
       // Transition to AWAITING_PAYMENT
       transaction.status = "AWAITING_PAYMENT";
       await transaction.save();
-      await createNotification(transaction.borrower, "OFFER_ACCEPTED", "Negotiation Accepted 🎉", `Your negotiation for ${transaction.dailyRate}/day has been accepted! Please checkout.`);
+      const notifMsg = isSecondHand
+        ? `Your purchase request for ₹${transaction.dailyRate} has been accepted! Please checkout.`
+        : `Your negotiation for ${transaction.dailyRate}/day has been accepted! Please checkout.`;
+      await createNotification(transaction.borrower, "OFFER_ACCEPTED", "Negotiation Accepted 🎉", notifMsg, req.userId, `/product/${transaction.product._id}?tx=${transaction._id}`, transaction._id);
     } else if (action === "COUNTER") {
       transaction.negotiationHistory.push({ offeredBy: req.userId, rate: counterRate });
       transaction.dailyRate = counterRate;
@@ -390,8 +401,15 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
       await transaction.save();
       
       const receiver = req.userId.toString() === transaction.owner.toString() ? transaction.borrower : transaction.owner;
-      await createNotification(receiver, "NEW_NEGOTIATION_OFFER", "Counter Offer Made", `New counter price proposal of ₹${counterRate}/day received.`);
+      const notifMsg = isSecondHand
+        ? `New counter price proposal of ₹${counterRate} received.`
+        : `New counter price proposal of ₹${counterRate}/day received.`;
+      await createNotification(receiver, "NEW_NEGOTIATION_OFFER", "Counter Offer Made", notifMsg, req.userId, `/product/${transaction.product._id}?tx=${transaction._id}`, transaction._id);
     } else {
+      const notifMsg = isSecondHand
+        ? `Your purchase request for ₹${transaction.dailyRate} has been rejected.`
+        : `Your negotiation for ₹${transaction.dailyRate}/day has been rejected.`;
+      await createNotification(transaction.borrower, "OFFER_REJECTED", "Negotiation Rejected ❌", notifMsg, req.userId, "", transaction._id);
       await Transaction.findByIdAndDelete(transaction._id);
       return res.json({ msg: "Offer rejected and closed." });
     }
@@ -427,7 +445,7 @@ router.post("/checkout/:id", verifyToken, async (req, res) => {
     transaction.status = "RESERVED";
     await transaction.save();
 
-    await createNotification(transaction.owner, "OFFER_ACCEPTED", "Escrow Secured 🔒", `Funds for listing are safely held in escrow. Setup pickup!`);
+    await createNotification(transaction.owner, "OFFER_ACCEPTED", "Escrow Secured 🔒", `Funds for listing are safely held in escrow. Setup pickup!`, null, "", transaction._id);
 
     res.json({ success: true, transaction });
   } catch (err) {
@@ -493,7 +511,7 @@ router.post("/transaction/:id/verify-handoff", verifyToken, async (req, res) => 
     transaction.handoffOtpExpiry = undefined;
     await transaction.save();
 
-    await createNotification(transaction.borrower, "OTP_GENERATED", "Handoff Complete 🚀", "Rental is now active. Ensure safe usage!");
+    await createNotification(transaction.borrower, "OTP_GENERATED", "Handoff Complete 🚀", "Rental is now active. Ensure safe usage!", null, "", transaction._id);
 
     res.json({ success: true, transaction });
   } catch (err) {
@@ -514,7 +532,7 @@ router.post("/transaction/:id/initiate-return", verifyToken, async (req, res) =>
     transaction.status = "RETURN_INITIATED";
     await transaction.save();
 
-    await createNotification(transaction.owner, "RETURN_INITIATED", "Return Initiated", "Check physical device and verify OTP to confirm return.");
+    await createNotification(transaction.owner, "RETURN_INITIATED", "Return Initiated", "Check physical device and verify OTP to confirm return.", null, "", transaction._id);
 
     res.json(transaction);
   } catch (err) {
@@ -552,7 +570,7 @@ router.post("/transaction/:id/verify-return", verifyToken, async (req, res) => {
       transaction.claimAmount = claimAmount;
       transaction.claimStatus = "FILED";
       await transaction.save();
-      await createNotification(transaction.borrower, "DISPUTE_RAISED", "Damage Claim Submitted ⚠️", `Owner reported damage. Escrow deposit lock has been suspended.`);
+      await createNotification(transaction.borrower, "DISPUTE_RAISED", "Damage Claim Submitted ⚠️", `Owner reported damage. Escrow deposit lock has been suspended.`, null, "", transaction._id);
     } else {
       transaction.status = "SETTLED";
       transaction.escrowStatus = "RELEASED";
@@ -563,8 +581,8 @@ router.post("/transaction/:id/verify-return", verifyToken, async (req, res) => {
       // Free product listing back to active status
       await Product.findByIdAndUpdate(transaction.product, { status: "ACTIVE" });
 
-      await createNotification(transaction.borrower, "SETTLEMENT_COMPLETED", "Deposit Refunded", "Deposit returned successfully!");
-      await createNotification(transaction.owner, "SETTLEMENT_COMPLETED", "Earnings Disbursed", "Earnings are added to your wallet.");
+      await createNotification(transaction.borrower, "SETTLEMENT_COMPLETED", "Deposit Refunded", "Deposit returned successfully!", null, "", transaction._id);
+      await createNotification(transaction.owner, "SETTLEMENT_COMPLETED", "Earnings Disbursed", "Earnings are added to your wallet.", null, "", transaction._id);
     }
 
     res.json({ success: true, transaction });
@@ -623,6 +641,30 @@ router.post("/admin/disputes/:id/resolve", verifyToken, async (req, res) => {
 // Get Messages
 router.get("/chat/:transactionId", verifyToken, async (req, res) => {
   try {
+    const transaction = await Transaction.findById(req.params.transactionId);
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    const isBorrower = transaction.borrower.toString() === req.userId;
+    const isOwner = transaction.owner.toString() === req.userId;
+    if (!isBorrower && !isOwner) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    const CHAT_ALLOWED_READ_STATES = [
+      "PENDING_NEGOTIATION",
+      "AWAITING_PAYMENT",
+      "RESERVED",
+      "IN_POSSESSION",
+      "RETURN_INITIATED",
+      "DAMAGE_REVIEW",
+      "DISPUTED",
+      "REFUND_PROCESSING",
+      "SETTLED"
+    ];
+    if (!CHAT_ALLOWED_READ_STATES.includes(transaction.status)) {
+      return res.status(400).json({ msg: `Read access is not permitted for transaction status: ${transaction.status}` });
+    }
+
     const messages = await Message.find({ transaction: req.params.transactionId })
       .populate("sender", "name")
       .sort({ createdAt: 1 });
@@ -635,6 +677,28 @@ router.get("/chat/:transactionId", verifyToken, async (req, res) => {
 // Send Chat Message
 router.post("/chat/:transactionId", verifyToken, async (req, res) => {
   try {
+    const transaction = await Transaction.findById(req.params.transactionId);
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    const isBorrower = transaction.borrower.toString() === req.userId;
+    const isOwner = transaction.owner.toString() === req.userId;
+    if (!isBorrower && !isOwner) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    const CHAT_ALLOWED_WRITE_STATES = [
+      "PENDING_NEGOTIATION",
+      "AWAITING_PAYMENT",
+      "RESERVED",
+      "IN_POSSESSION",
+      "RETURN_INITIATED",
+      "DAMAGE_REVIEW",
+      "DISPUTED"
+    ];
+    if (!CHAT_ALLOWED_WRITE_STATES.includes(transaction.status)) {
+      return res.status(400).json({ msg: `Sending messages is not permitted for transaction status: ${transaction.status}` });
+    }
+
     const { receiverId, content } = req.body;
     const message = await Message.create({
       transaction: req.params.transactionId,
@@ -703,7 +767,9 @@ router.post("/auction/:productId/bid", verifyToken, async (req, res) => {
 // ==========================================
 router.get("/notifications", verifyToken, async (req, res) => {
   try {
-    const notifications = await Notification.find({ recipient: req.userId, isRead: false }).sort({ createdAt: -1 });
+    const notifications = await Notification.find({ recipient: req.userId, isRead: false })
+      .populate("sender", "name email phone isVerified profilePic")
+      .sort({ createdAt: -1 });
     res.json(notifications);
   } catch (err) {
     res.status(500).json({ msg: err.message });
@@ -753,6 +819,22 @@ router.post("/reviews", verifyToken, async (req, res) => {
     });
 
     res.json(review);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Get User's Active Transactions / Chats
+router.get("/transactions", verifyToken, async (req, res) => {
+  try {
+    const transactions = await Transaction.find({
+      $or: [{ owner: req.userId }, { borrower: req.userId }]
+    })
+    .populate("product", "title productType rentalPrice")
+    .populate("owner", "name email phone isVerified profilePic")
+    .populate("borrower", "name email phone isVerified profilePic")
+    .sort({ updatedAt: -1 });
+    res.json(transactions);
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }

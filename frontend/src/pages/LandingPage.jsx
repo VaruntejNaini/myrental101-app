@@ -5,6 +5,7 @@ import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
 import PostProductModal from "../components/PostProductModal";
 import NotificationBell from "../components/NotificationBell";
+import ChatBell from "../components/ChatBell";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
@@ -162,6 +163,12 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
             {item.badge}
           </div>
         )
+      )}
+
+      {isOwnerCard && item.productType && (
+        <div className="absolute top-3 right-3 z-10 text-white text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-slate-900/80 border border-slate-700/50">
+          {item.productType === "SECOND_HAND" ? "FOR SALE" : "FOR RENT"}
+        </div>
       )}
 
       {/* Bookmark Button */}
@@ -332,6 +339,10 @@ export default function Dashboard() {
           if (res.data?.name) {
             setUserName(res.data.name);
             localStorage.setItem("user_name", res.data.name);
+          }
+          if (res.data?.profilePic) {
+            setProfilePic(res.data.profilePic);
+            localStorage.setItem("userProfilePic", res.data.profilePic);
           }
         })
         .catch(err => console.error("Error loading user profile:", err));
@@ -798,7 +809,10 @@ export default function Dashboard() {
 
 
             {isLoggedIn && (
-              <NotificationBell isNight={isNight} />
+              <div className="flex items-center gap-2">
+                <ChatBell isNight={isNight} />
+                <NotificationBell isNight={isNight} />
+              </div>
             )}
 
             {isLoggedIn ? (
@@ -994,10 +1008,10 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {dbProducts.filter(p => p.productType === "RENT").map((item) => (
+            {dbProducts.filter(p => p.productType === "RENT" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "📷", owner: item.owner?.name || "Owner", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "📷", owner: item.owner?.name || "Owner", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images, productType: item.productType }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1016,15 +1030,15 @@ export default function Dashboard() {
             <h2 className={`text-2xl font-black tracking-tight ${isNight ? "text-white" : "text-black"}`} style={{ fontFamily: "'Playfair Display', serif" }}>
               📦 Items You Are Listing
             </h2>
-            <button onClick={() => navigate(isLoggedIn ? "/orders" : "/login")} className="text-xs font-black text-indigo-500 hover:underline">
-              Manage Orders
+            <button onClick={() => navigate(isLoggedIn ? "/my-listings" : "/login")} className="text-xs font-black text-indigo-500 hover:underline cursor-pointer">
+              View More
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
             {myProducts.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "You", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images }} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "You", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images, productType: item.productType }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1074,10 +1088,10 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {dbProducts.filter(p => p.productType === "SECOND_HAND").map((item) => (
+            {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "🚁", owner: item.owner?.name || "Owner", area: item.area, badge: "Direct Sale", location: item.location, securityDeposit: item.securityDeposit, images: item.images, rowType: "Second-Hand", unit: "flat" }} 
+                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "🚁", owner: item.owner?.name || "Owner", area: item.area, badge: "Direct Sale", location: item.location, securityDeposit: item.securityDeposit, images: item.images, rowType: "Second-Hand", unit: "flat", productType: item.productType }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1087,7 +1101,7 @@ export default function Dashboard() {
                 coordsError={coordsError}
               />
             ))}
-            {dbProducts.filter(p => p.productType === "SECOND_HAND").length === 0 && (
+            {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).length === 0 && (
               <p className="text-xs text-slate-400 p-4">No second-hand buyout listings currently active.</p>
             )}
           </div>

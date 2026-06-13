@@ -21,6 +21,10 @@ export default function Profile() {
           if (res.data?.email) {
             setUserEmail(res.data.email);
           }
+          if (res.data?.profilePic) {
+            setProfilePic(res.data.profilePic);
+            localStorage.setItem("userProfilePic", res.data.profilePic);
+          }
         })
         .catch(err => console.error("Error loading profile:", err));
     }
@@ -768,6 +772,8 @@ export default function Profile() {
                           const croppedUrl = canvas.toDataURL("image/jpeg", 0.95);
                           setProfilePic(croppedUrl);
                           localStorage.setItem("userProfilePic", croppedUrl);
+                          API.put("/auth/profile", { profilePic: croppedUrl })
+                            .catch(err => console.error("Error saving profile pic to backend:", err));
                           setShowCropModal(false);
                           setShowNotification("Avatar cropped and updated successfully! 🎉");
                         }

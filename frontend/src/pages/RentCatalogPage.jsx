@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 import NotificationBell from "../components/NotificationBell";
+import ChatBell from "../components/ChatBell";
 import PostProductModal from "../components/PostProductModal";
 
 const getImageUrl = (image) => {
@@ -18,7 +19,7 @@ export default function RentCatalogPage() {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [maxPrice, setMaxPrice] = useState(1000);
-  const [maxDistance, setMaxDistance] = useState(5);
+  const [maxDistance, setMaxDistance] = useState(100);
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
   const [notification, setNotification] = useState("");
   const [postModalOpen, setPostModalOpen] = useState(false);
@@ -148,6 +149,7 @@ export default function RentCatalogPage() {
           >
             + List a Rental
           </button>
+          <ChatBell isNight={isNight} />
           <NotificationBell isNight={isNight} />
         </div>
         <div>

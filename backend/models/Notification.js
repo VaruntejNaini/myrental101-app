@@ -12,6 +12,7 @@ const notificationSchema = new mongoose.Schema(
       required: true,
     },
     link: { type: String },
+    transactionId: { type: mongoose.Schema.Types.ObjectId, ref: "Transaction", default: null }
   },
   { timestamps: true }
 );

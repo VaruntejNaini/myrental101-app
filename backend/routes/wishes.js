@@ -8,7 +8,7 @@ import Transaction from "../models/Transaction.js";
 const router = express.Router();
 
 // Helper to push automated notifications
-async function createNotification(userId, type, title, message) {
+async function createNotification(userId, type, title, message, senderId = null) {
   try {
     let newType = "SYSTEM";
     if (["WISH_OFFER_RECEIVED", "OFFER_ACCEPTED"].includes(type)) {
@@ -16,6 +16,7 @@ async function createNotification(userId, type, title, message) {
     }
     const notif = new Notification({
       recipient: userId,
+      sender: senderId,
       message: `${title}: ${message}`,
       type: newType
     });
@@ -72,7 +73,7 @@ router.post("/:id/pitch", verifyToken, async (req, res) => {
 
     await wish.save();
 
-    await createNotification(wish.creator, "WISH_OFFER_RECEIVED", "New Quote Received", `An owner offered a product quote for your wish request: "${wish.title}".`);
+    await createNotification(wish.creator, "WISH_OFFER_RECEIVED", "New Quote Received", `An owner offered a product quote for your wish request: "${wish.title}".`, req.userId);
 
     res.json(wish);
   } catch (err) {
@@ -129,7 +130,7 @@ router.post("/:id/accept", verifyToken, async (req, res) => {
       status: "AWAITING_PAYMENT",
     });
 
-    await createNotification(selectedOffer.owner, "OFFER_ACCEPTED", "Quote Offer Selected!", `Your quote for "${wish.title}" was selected. Awaiting borrower payment.`);
+    await createNotification(selectedOffer.owner, "OFFER_ACCEPTED", "Quote Offer Selected!", `Your quote for "${wish.title}" was selected. Awaiting borrower payment.`, req.userId);
 
     res.json({ success: true, transaction });
   } catch (err) {

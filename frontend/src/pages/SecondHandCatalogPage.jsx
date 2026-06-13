@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 import NotificationBell from "../components/NotificationBell";
+import ChatBell from "../components/ChatBell";
 import PostProductModal from "../components/PostProductModal";
 
 const getImageUrl = (image) => {
@@ -107,6 +108,45 @@ export default function SecondHandCatalogPage() {
     setTimeout(() => setNotification(""), 3000);
   };
 
+  const handleBuyClick = async (productId, price) => {
+    try {
+      const res = await API.post("/rent/negotiate", {
+        productId,
+        startDate: new Date(),
+        endDate: new Date(),
+        dailyRate: price,
+        securityDeposit: 0
+      });
+      triggerToast(`Purchase request submitted successfully!`);
+      setTimeout(() => navigate(`/rent/checkout/${productId}`), 1500);
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Purchase request failed");
+    }
+  };
+
+  const handleNegotiationClick = async (productId, currentPrice, title) => {
+    const offer = window.prompt(`Enter your custom buyout offer price for "${title}" (Current: ₹${currentPrice}):`);
+    if (!offer) return;
+    const numericOffer = parseFloat(offer);
+    if (isNaN(numericOffer) || numericOffer <= 0) {
+      triggerToast("Please enter a valid price.");
+      return;
+    }
+    
+    try {
+      await API.post("/rent/negotiate", {
+        productId,
+        startDate: new Date(),
+        endDate: new Date(),
+        dailyRate: numericOffer,
+        securityDeposit: 0
+      });
+      triggerToast(`Buyout negotiation request of ₹${numericOffer} sent!`);
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Negotiation request failed");
+    }
+  };
+
   // Filter logic
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
@@ -136,6 +176,7 @@ export default function SecondHandCatalogPage() {
           >
             + Sell an Item
           </button>
+          <ChatBell isNight={isNight} />
           <NotificationBell isNight={isNight} />
         </div>
         <div>
@@ -294,7 +335,10 @@ export default function SecondHandCatalogPage() {
                           </span>
                         )}
                       </div>
-                      <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors">Buy</button>
+                      <div className="flex flex-col gap-1 w-20">
+                        <button onClick={() => handleBuyClick(p._id, p.rentalPrice)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer text-center">Buy</button>
+                        <button onClick={() => handleNegotiationClick(p._id, p.rentalPrice, p.title)} className="w-full bg-slate-800 hover:bg-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer text-center">Negotiate</button>
+                      </div>
                     </div>
                   </div>
                 </div>

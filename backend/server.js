@@ -8,6 +8,8 @@ import rentRoutes from "./routes/rent.js";
 import wishesRoutes from "./routes/wishes.js";
 import Product from "./models/Product.js";
 import Wish from "./models/Wish.js";
+import Notification from "./models/Notification.js";
+import Transaction from "./models/Transaction.js";
 
 import authRoutes from "./routes/auth.js";
 import addressRoutes from "./routes/addresses.js";
@@ -78,120 +80,66 @@ app.use("/api/addresses", addressRoutes);
 app.use("/api/rent", rentRoutes);
 app.use("/api/wishes", wishesRoutes);
 
-// Seed Mock Database listings on start if empty
-const seedDatabase = async () => {
+// Clean up Mock Database listings on startup (deletes mock IDs and preserves user listings)
+const cleanMockDatabase = async () => {
   try {
-    const pCount = await Product.countDocuments();
-    if (pCount === 0) {
-      console.log("Seeding initial mock listings...");
-      const dummyUserId = new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8b1"); // stable fake ID
-      
-      const seedProducts = [
-        {
-          _id: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a1"),
-          title: "Canon EOS R50 Camera",
-          description: "Vibrant and compact mirrorless camera designed for content creators. Capture stunning 24.2 MP photos.",
-          category: "Electronics",
-          rentalPrice: 450,
-          securityDeposit: 1125,
-          city: "Hyderabad",
-          area: "Madhapur",
-          productType: "RENT",
-          status: "ACTIVE",
-          owner: dummyUserId,
-          location: {
-            type: "Point",
-            coordinates: [78.3885, 17.4483]
-          }
-        },
-        {
-          _id: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a2"),
-          title: "Honda Activa Scooter",
-          description: "Regularly serviced and clean Activa 6G. Ideal for navigating daily commutes and dense city traffic.",
-          category: "Vehicles",
-          rentalPrice: 250,
-          securityDeposit: 625,
-          city: "Hyderabad",
-          area: "Gachibowli",
-          productType: "RENT",
-          status: "ACTIVE",
-          owner: dummyUserId,
-          location: {
-            type: "Point",
-            coordinates: [78.3489, 17.4401]
-          }
-        },
-        {
-          _id: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a3"),
-          title: "PlayStation 5 Console",
-          description: "Unleash new gaming possibilities with lightning-fast loading, deeper immersion, and ultra-high-speed SSD.",
-          category: "Electronics",
-          rentalPrice: 350,
-          securityDeposit: 875,
-          city: "Hyderabad",
-          area: "Jubilee Hills",
-          productType: "RENT",
-          status: "ACTIVE",
-          owner: dummyUserId,
-          location: {
-            type: "Point",
-            coordinates: [78.4074, 17.4311]
-          }
-        },
-        {
-          _id: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a4"),
-          title: "DeWalt Power Drill Set",
-          description: "Cordless drill set featuring a high-torque motor and variable speed controls. Includes 20V battery.",
-          category: "Tools",
-          rentalPrice: 120,
-          securityDeposit: 300,
-          city: "Hyderabad",
-          area: "Madhapur",
-          productType: "RENT",
-          status: "ACTIVE",
-          owner: dummyUserId,
-          location: {
-            type: "Point",
-            coordinates: [78.3914, 17.4429]
-          }
-        }
-      ];
-
-      await Product.insertMany(seedProducts);
-      console.log("Mock products seeded successfully! ✅");
-    }
-
-    const wCount = await Wish.countDocuments();
-    if (wCount === 0) {
-      const dummyUserId = new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8b1");
-      const seedWishes = [
-        {
-          title: "2-Person Camping Tent",
-          description: "Durable dome camping tent featuring quick installation mechanism and water-proof fabric overlays.",
-          category: "Tools",
-          budget: 150,
-          durationDays: 5,
-          creator: dummyUserId,
-          status: "ACTIVE"
-        },
-        {
-          title: "Fender Stratocaster Guitar",
-          description: "Iconic electric guitar delivering classic Fender chime and versatility. Needed for a weekend gig.",
-          category: "Music",
-          budget: 200,
-          durationDays: 3,
-          creator: dummyUserId,
-          status: "ACTIVE"
-        }
-      ];
-      await Wish.insertMany(seedWishes);
-      console.log("Mock wishes seeded successfully! ✅");
-    }
+    await Product.deleteMany({
+      _id: {
+        $in: [
+          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a1"),
+          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a2"),
+          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a3"),
+          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a4")
+        ]
+      }
+    });
+    await Wish.deleteMany({
+      creator: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8b1")
+    });
+    console.log("Mock data cleaned and database is ready! ✅");
   } catch (err) {
-    console.error("Error seeding listings database:", err);
+    console.error("Error cleaning database:", err);
   }
 };
-mongoose.connection.once("open", seedDatabase);
+
+// One-time startup migration to link old/legacy notifications to their active transactions
+const migrateOldNotifications = async () => {
+  try {
+    const notifications = await Notification.find({ transactionId: null });
+    let count = 0;
+    for (const notif of notifications) {
+      const txMatch = notif.link ? notif.link.match(/tx=([^&#=]*)/) : null;
+      let txId = txMatch ? txMatch[1] : null;
+
+      if (!txId) {
+        // Find any active transaction involving borrower & owner
+        const tx = await Transaction.findOne({
+          $or: [
+            { borrower: notif.recipient, owner: notif.sender },
+            { borrower: notif.sender, owner: notif.recipient }
+          ]
+        }).sort({ createdAt: -1 });
+        if (tx) {
+          txId = tx._id;
+        }
+      }
+
+      if (txId) {
+        notif.transactionId = txId;
+        await notif.save();
+        count++;
+      }
+    }
+    console.log(`Migrated ${count} legacy notifications to active transactions! 🚀`);
+  } catch (err) {
+    console.error("Error migrating notifications:", err);
+  }
+};
+
+mongoose.connection.once("open", async () => {
+  await cleanMockDatabase();
+  await migrateOldNotifications();
+});
 
 
 // ✅ AI Chat Route

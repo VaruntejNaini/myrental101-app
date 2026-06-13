@@ -491,6 +491,21 @@ router.get("/me", verifyToken, async (req, res) => {
   }
 });
 
+// UPDATE CURRENT USER PROFILE
+router.put("/profile", verifyToken, async (req, res) => {
+  try {
+    const { name, profilePic } = req.body;
+    const updateObj = {};
+    if (name) updateObj.name = name;
+    if (profilePic !== undefined) updateObj.profilePic = profilePic;
+
+    const user = await User.findByIdAndUpdate(req.userId, updateObj, { new: true }).select("-password");
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 // =========================
 // EXPORT
 // =========================

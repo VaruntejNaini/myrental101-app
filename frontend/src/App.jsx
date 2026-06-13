@@ -13,6 +13,8 @@ import RequestedCatalogPage from "./pages/RequestedCatalogPage";
 import MyOrders from "./pages/MyOrders";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import AddressManagement from "./pages/AddressManagement";
+import MyListings from "./pages/MyListings";
+import DesktopChatbox from "./components/DesktopChatbox";
 
 function App() {
   useEffect(() => {
@@ -43,8 +45,10 @@ function App() {
         <Route path="/rent-catalog" element={<RentCatalogPage />} />
         <Route path="/second-hand-catalog" element={<SecondHandCatalogPage />} />
         <Route path="/requested-catalog" element={<RequestedCatalogPage />} />
+        <Route path="/my-listings" element={<MyListings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <DesktopChatbox />
     </BrowserRouter>
   );
 }

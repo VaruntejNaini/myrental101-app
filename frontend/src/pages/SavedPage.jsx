@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NotificationBell from "../components/NotificationBell";
+import ChatBell from "../components/ChatBell";
 
 export default function SavedPage() {
   const navigate = useNavigate();
@@ -38,6 +39,7 @@ export default function SavedPage() {
           >
             ← Back to Home
           </button>
+          <ChatBell isNight={isNight} />
           <NotificationBell isNight={isNight} />
         </div>
         <div className="text-center md:text-right">

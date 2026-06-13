@@ -41,8 +41,10 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => {
+    console.log("Route ID:", id);
     API.get(`/rent/products/${id}`)
       .then((res) => {
+        console.log("API Response:", res.data);
         setProduct(res.data.product);
         setAuction(res.data.auction);
         setLoading(false);
@@ -75,7 +77,7 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (product?.category) {
+    if (product && product.category) {
       API.get(`/rent/products?category=${product.category}`)
         .then(res => {
           setSimilarProducts(res.data.filter(p => p._id !== id).slice(0, 3));
@@ -98,6 +100,7 @@ export default function ProductDetailPage() {
   };
 
   const handleNegotiateClick = async () => {
+    if (!product) return;
     try {
       await API.post("/rent/negotiate", {
         productId: id,
@@ -105,6 +108,30 @@ export default function ProductDetailPage() {
         endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
         dailyRate: product.rentalPrice,
         securityDeposit: product.securityDeposit
+      });
+      setIsNegotiationModalOpen(true);
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Negotiation request failed");
+    }
+  };
+
+  const handleSecondHandNegotiateClick = async () => {
+    if (!product) return;
+    const offer = window.prompt(`Enter your custom buyout offer price for "${product.title}" (Current: ₹${product.rentalPrice}):`);
+    if (!offer) return;
+    const numericOffer = parseFloat(offer);
+    if (isNaN(numericOffer) || numericOffer <= 0) {
+      triggerToast("Please enter a valid price.");
+      return;
+    }
+    
+    try {
+      await API.post("/rent/negotiate", {
+        productId: id,
+        startDate: new Date(),
+        endDate: new Date(),
+        dailyRate: numericOffer,
+        securityDeposit: 0
       });
       setIsNegotiationModalOpen(true);
     } catch (err) {
@@ -134,7 +161,19 @@ export default function ProductDetailPage() {
   const handleAction = async () => {
     if (!product) return;
     if (product.productType === "SECOND_HAND") {
-      triggerToast(`Purchase request for ${product.title} submitted! Checkout pending.`);
+      try {
+        const res = await API.post("/rent/negotiate", {
+          productId: id,
+          startDate: new Date(),
+          endDate: new Date(),
+          dailyRate: product.rentalPrice,
+          securityDeposit: 0
+        });
+        triggerToast(`Purchase request for ${product.title} submitted! Checkout pending.`);
+        setTimeout(() => navigate(`/rent/checkout/${id}`), 1500);
+      } catch (err) {
+        triggerToast(err.response?.data?.msg || "Purchase request failed");
+      }
     } else {
       // Direct standard lease creation
       try {
@@ -159,6 +198,8 @@ export default function ProductDetailPage() {
       }
     }
   };
+
+  console.log("Product State:", product);
 
   if (loading) {
     return (
@@ -305,6 +346,20 @@ export default function ProductDetailPage() {
                   }`}
                 >
                   💬 Propose Custom Price Negotiation
+                </button>
+              </div>
+            )}
+
+            {product.productType === "SECOND_HAND" && (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleSecondHandNegotiateClick}
+                  className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all cursor-pointer border flex items-center justify-center gap-2 ${
+                    isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  💬 Propose Buyout Offer Price
                 </button>
               </div>
             )}

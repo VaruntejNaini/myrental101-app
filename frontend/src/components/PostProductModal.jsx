@@ -15,6 +15,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
   const [showDepositInfo, setShowDepositInfo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [duplicateError, setDuplicateError] = useState("");
 
   // Clean up object URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     setSelectedFiles([]);
     setPreviewUrls([]);
     setError("");
+    setDuplicateError("");
     onClose();
   };
 
@@ -46,14 +48,39 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     const files = Array.from(e.target.files);
     if (!files || files.length === 0) return;
 
-    if (selectedFiles.length + files.length > 5) {
+    let hasDuplicate = false;
+    const filteredFiles = [];
+
+    for (const file of files) {
+      const isDup = selectedFiles.some(
+        (existing) => existing.name === file.name && existing.size === file.size
+      );
+      if (isDup) {
+        hasDuplicate = true;
+      } else {
+        filteredFiles.push(file);
+      }
+    }
+
+    if (hasDuplicate) {
+      setDuplicateError("cannot upload same img multiple times");
+    } else {
+      setDuplicateError("");
+    }
+
+    if (filteredFiles.length === 0) {
+      e.target.value = "";
+      return;
+    }
+
+    if (selectedFiles.length + filteredFiles.length > 5) {
       setError("You can upload a maximum of 5 images.");
       e.target.value = "";
       return;
     }
 
     const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-    for (const file of files) {
+    for (const file of filteredFiles) {
       if (!file.type.startsWith("image/")) {
         setError("Only image files are allowed.");
         e.target.value = "";
@@ -67,8 +94,8 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     }
 
     setError("");
-    const newPreviews = files.map(file => URL.createObjectURL(file));
-    setSelectedFiles((prev) => [...prev, ...files]);
+    const newPreviews = filteredFiles.map(file => URL.createObjectURL(file));
+    setSelectedFiles((prev) => [...prev, ...filteredFiles]);
     setPreviewUrls((prev) => [...prev, ...newPreviews]);
     e.target.value = ""; // Reset value to allow selecting same file/triggering change
   };
@@ -90,6 +117,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
 
     setIsSubmitting(true);
     setError("");
+    setDuplicateError("");
 
     try {
       const formData = new FormData();
@@ -119,6 +147,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
       setDescription("");
       setSelectedFiles([]);
       setPreviewUrls([]);
+      setDuplicateError("");
       
       if (onProductCreated) onProductCreated();
       onClose();
@@ -356,6 +385,11 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
           </div>
 
           {/* Submit Action */}
+          {duplicateError && (
+            <div className="text-red-500 font-extrabold text-xs text-center mb-2">
+              {duplicateError}
+            </div>
+          )}
           <button
             type="submit"
             disabled={isSubmitting}

@@ -1,8 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import ChatDrawer from "./ChatDrawer";
+import API from "../api";
 
 export default function ChatBell({ isNight }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = async () => {
+    if (!localStorage.getItem("token")) return;
+    try {
+      const res = await API.get("/rent/chat/unread-count");
+      setUnreadCount(res.data.unreadCount || 0);
+    } catch (err) {
+      console.error("Error fetching unread count:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnreadCount();
+
+    // Set up polling
+    const interval = setInterval(fetchUnreadCount, 4000);
+
+    // Listen for custom event triggers
+    window.addEventListener("refreshUnreadChatCount", fetchUnreadCount);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("refreshUnreadChatCount", fetchUnreadCount);
+    };
+  }, []);
 
   return (
     <>
@@ -14,12 +41,19 @@ export default function ChatBell({ isNight }) {
         title="Messages"
       >
         <span className="text-base select-none">💬</span>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white ring-2 ring-white dark:ring-slate-950 select-none shadow animate-pulse">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
       </button>
 
       <ChatDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        refreshUnreadCount={fetchUnreadCount}
       />
     </>
   );
 }
+

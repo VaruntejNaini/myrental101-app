@@ -11,5 +11,12 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Compound index for optimizing unread message count queries
+messageSchema.index({ receiver: 1, readStatus: 1 });
+
+// Index for optimizing chat history retrieval and finding latest message
+messageSchema.index({ transaction: 1, createdAt: -1 });
+
 const Message = mongoose.model("Message", messageSchema);
 export default Message;
+

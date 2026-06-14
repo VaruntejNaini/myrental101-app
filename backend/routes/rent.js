@@ -638,6 +638,19 @@ router.post("/admin/disputes/:id/resolve", verifyToken, async (req, res) => {
 // 5. USER MESSAGING SERVICES
 // ==========================================
 
+// Get total count of unread chat messages for the current user
+router.get("/chat/unread-count", verifyToken, async (req, res) => {
+  try {
+    const unreadCount = await Message.countDocuments({
+      receiver: req.userId,
+      readStatus: false,
+    });
+    res.json({ unreadCount });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 // Get Messages
 router.get("/chat/:transactionId", verifyToken, async (req, res) => {
   try {
@@ -669,6 +682,19 @@ router.get("/chat/:transactionId", verifyToken, async (req, res) => {
       .populate("sender", "name")
       .sort({ createdAt: 1 });
     res.json(messages);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Mark messages in a transaction thread as read
+router.post("/chat/:transactionId/read", verifyToken, async (req, res) => {
+  try {
+    await Message.updateMany(
+      { transaction: req.params.transactionId, receiver: req.userId, readStatus: false },
+      { readStatus: true }
+    );
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -711,6 +737,7 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
     res.status(500).json({ msg: err.message });
   }
 });
+
 
 // ==========================================
 // 6. MICRO-AUCTIONS HIGH-TRAFFIC BIDDING
@@ -827,17 +854,110 @@ router.post("/reviews", verifyToken, async (req, res) => {
 // Get User's Active Transactions / Chats
 router.get("/transactions", verifyToken, async (req, res) => {
   try {
-    const transactions = await Transaction.find({
-      $or: [{ owner: req.userId }, { borrower: req.userId }]
-    })
-    .populate("product", "title productType rentalPrice")
-    .populate("owner", "name email phone isVerified profilePic")
-    .populate("borrower", "name email phone isVerified profilePic")
-    .sort({ updatedAt: -1 });
-    res.json(transactions);
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const transactions = await Transaction.aggregate([
+      {
+        $match: {
+          $or: [
+            { owner: userId },
+            { borrower: userId }
+          ]
+        }
+      },
+      {
+        $lookup: {
+          from: "messages",
+          let: { txId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$transaction", "$$txId"] } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 }
+          ],
+          as: "lastMessageArray"
+        }
+      },
+      {
+        $lookup: {
+          from: "messages",
+          let: { txId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $and: [
+                  { $expr: { $eq: ["$transaction", "$$txId"] } },
+                  { receiver: userId },
+                  { readStatus: false }
+                ]
+              }
+            },
+            { $count: "count" }
+          ],
+          as: "unreadCountArray"
+        }
+      },
+      {
+        $project: {
+          product: 1,
+          owner: 1,
+          borrower: 1,
+          startDate: 1,
+          endDate: 1,
+          dailyRate: 1,
+          securityDeposit: 1,
+          totalPaid: 1,
+          status: 1,
+          updatedAt: 1,
+          createdAt: 1,
+          lastMessage: { $arrayElemAt: ["$lastMessageArray", 0] },
+          unreadCount: {
+            $ifNull: [
+              { $arrayElemAt: ["$unreadCountArray.count", 0] },
+              0
+            ]
+          }
+        }
+      }
+    ]);
+
+    // Populate details via mongoose helper
+    const populated = await Transaction.populate(transactions, [
+      { path: "product", select: "title productType rentalPrice" },
+      { path: "owner", select: "name email phone isVerified profilePic" },
+      { path: "borrower", select: "name email phone isVerified profilePic" }
+    ]);
+
+    // Sort by latest message timestamp descending, falling back to transaction updatedAt
+    populated.sort((a, b) => {
+      const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : new Date(a.updatedAt).getTime();
+      const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : new Date(b.updatedAt).getTime();
+      return timeB - timeA;
+    });
+
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
 });
+
+// Get specific transaction details
+router.get("/transactions/:id", verifyToken, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id)
+      .populate("product", "title productType rentalPrice")
+      .populate("owner", "name email phone isVerified profilePic")
+      .populate("borrower", "name email phone isVerified profilePic");
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    // Validate ownership/involvement
+    if (transaction.owner._id.toString() !== req.userId && transaction.borrower._id.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    res.json(transaction);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 
 export default router;

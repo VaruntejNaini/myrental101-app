@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 
-const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOffer }) => {
+const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOffer, handleDeleteWish }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
   const cardRef = useRef(null);
   const hasTriggered = useRef(false);
 
@@ -52,7 +53,33 @@ const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOf
   }, [wish._id, currentUser]);
 
   return (
-    <div ref={cardRef} className={`p-6 rounded-2xl border flex flex-col justify-between ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+    <div ref={cardRef} className={`p-6 rounded-2xl border flex flex-col justify-between relative ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+      {isCreator && (
+        <button
+          disabled={isDeleting}
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (window.confirm("Are you sure you wanna delete your request?")) {
+              setIsDeleting(true);
+              await handleDeleteWish(wish._id);
+              setIsDeleting(false);
+            }
+          }}
+          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center shadow transition-all cursor-pointer bg-slate-950/60 text-white hover:bg-red-500 hover:scale-110 disabled:opacity-50 z-20"
+          title="Delete Request"
+        >
+          {isDeleting ? (
+            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+        </button>
+      )}
       <div>
         <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{wish.category}</span>
         <h4 className="font-extrabold text-base mt-2">{wish.title}</h4>
@@ -201,6 +228,17 @@ export default function RequestedCatalogPage() {
     }
   };
 
+  const handleDeleteWish = async (wishId) => {
+    try {
+      await API.delete(`/wishes/${wishId}`);
+      triggerToast("Request deleted successfully. 🎉");
+      setWishes(prev => prev.filter(w => w._id !== wishId));
+    } catch (err) {
+      const errMsg = err.response?.data?.msg || "Failed to delete request. Please try again.";
+      triggerToast(errMsg);
+    }
+  };
+
   const filteredRequests = wishes.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
@@ -283,6 +321,7 @@ export default function RequestedCatalogPage() {
                   isNight={isNight}
                   handlePitchQuote={handlePitchQuote}
                   handleAcceptOffer={handleAcceptOffer}
+                  handleDeleteWish={handleDeleteWish}
                 />
               ))}
             </div>

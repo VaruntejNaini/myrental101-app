@@ -100,8 +100,9 @@ const getImageUrl = (image) => {
 };
 
 // ── Premium Product Card with Image Slider & Emojis ─────────────────────────
-const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct }) => {
+const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct, currentUser, onDeleteWish }) => {
   const [imgIndex, setImgIndex] = useState(0);
+  const [isDeletingWish, setIsDeletingWish] = useState(false);
   const [showFadeMsg, setShowFadeMsg] = useState(false);
   const cardRef = useRef(null);
   const hasTriggered = useRef(false);
@@ -214,28 +215,55 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         </div>
       )}
 
-      {/* Bookmark Button */}
+      {/* Bookmark or Delete Button */}
       {!isOwnerCard && (
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onBookmarkToggle(item);
-          }}
-          className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow transition-all cursor-pointer ${
-            isBookmarked ? "bg-red-500 text-white hover:bg-red-600 scale-110" : "bg-slate-900/60 text-white hover:bg-indigo-500"
-          }`}
-          title={isBookmarked ? "Remove Bookmark" : "Bookmark Item"}
-        >
-          {isBookmarked ? (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4.5 h-4.5">
-              <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4.5 h-4.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
-            </svg>
-          )}
-        </button>
+        item.rowType === "Wishlist" && currentUser && (item.creatorId === currentUser._id || item.creatorId === currentUser) ? (
+          <button 
+            disabled={isDeletingWish}
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (window.confirm("Are you sure you wanna delete your request?")) {
+                setIsDeletingWish(true);
+                await onDeleteWish?.(item.id);
+                setIsDeletingWish(false);
+              }
+            }}
+            className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full flex items-center justify-center shadow transition-all cursor-pointer bg-slate-900/60 text-white hover:bg-red-500 hover:scale-110 disabled:opacity-50"
+            title="Delete Request"
+          >
+            {isDeletingWish ? (
+              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </button>
+        ) : (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onBookmarkToggle(item);
+            }}
+            className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow transition-all cursor-pointer ${
+              isBookmarked ? "bg-red-500 text-white hover:bg-red-600 scale-110" : "bg-slate-900/60 text-white hover:bg-indigo-500"
+            }`}
+            title={isBookmarked ? "Remove Bookmark" : "Bookmark Item"}
+          >
+            {isBookmarked ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4.5 h-4.5">
+                <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4.5 h-4.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+              </svg>
+            )}
+          </button>
+        )
       )}
 
       {/* Image / Carousel Layer */}
@@ -373,12 +401,14 @@ export default function Dashboard() {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     const activeToken = localStorage.getItem("token");
     if (activeToken) {
       API.get("/auth/me")
         .then(res => {
+          setCurrentUser(res.data);
           if (res.data?.name) {
             setUserName(res.data.name);
             localStorage.setItem("user_name", res.data.name);
@@ -468,6 +498,17 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Error deleting product:", err);
       setShowNotification("Failed to delete listing.");
+    }
+  };
+
+  const handleDeleteWish = async (wishId) => {
+    try {
+      await API.delete(`/wishes/${wishId}`);
+      setShowNotification("Request deleted successfully! 🎉");
+      setDbWishes(prev => prev.filter(w => w._id !== wishId));
+    } catch (err) {
+      const errMsg = err.response?.data?.msg || "Failed to delete request.";
+      setShowNotification(errMsg);
     }
   };
 
@@ -1164,7 +1205,7 @@ export default function Dashboard() {
             {dbWishes.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0, rowType: "Wishlist" }} 
+                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", creatorId: item.creator?._id || item.creator, owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0, rowType: "Wishlist" }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1172,6 +1213,8 @@ export default function Dashboard() {
                 userCoords={userCoords}
                 coordsLoading={coordsLoading}
                 coordsError={coordsError}
+                currentUser={currentUser}
+                onDeleteWish={handleDeleteWish}
               />
             ))}
           </div>

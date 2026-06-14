@@ -244,4 +244,37 @@ console.log("viewedByUsers:", wish.viewedByUsers);
   }
 });
 
+// 6. Delete a Wish Request
+router.delete("/:id", verifyToken, async (req, res) => {
+  try {
+    const wish = await Wish.findById(req.params.id);
+    if (!wish) {
+      return res.status(404).json({ msg: "Wish request not found" });
+    }
+
+    // Only the creator can delete their wish request
+    if (wish.creator.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Not authorized to delete this wish request" });
+    }
+
+    // Prevent deletion of fulfilled wishes
+    if (wish.status === "FULFILLED") {
+      return res.status(400).json({ msg: "Cannot delete a fulfilled wish request." });
+    }
+
+    // Prevent deletion of wishes with active negotiations/offers
+    if (wish.offers && wish.offers.length > 0) {
+      return res.status(400).json({
+        msg: "Cannot delete a request that already has active offers. Mark it as fulfilled or cancel negotiations first."
+      });
+    }
+
+    await Wish.findByIdAndDelete(req.params.id);
+    res.json({ success: true, msg: "Wish request deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 export default router;
+

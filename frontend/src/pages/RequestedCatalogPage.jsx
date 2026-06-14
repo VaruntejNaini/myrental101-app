@@ -1,6 +1,108 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+
+const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOffer }) => {
+  const cardRef = useRef(null);
+  const hasTriggered = useRef(false);
+
+  const isCreator = currentUser && (
+    (wish.creator && wish.creator._id === currentUser._id) ||
+    (wish.creator === currentUser._id)
+  );
+
+  useEffect(() => {
+    if (hasTriggered.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !hasTriggered.current) {
+            hasTriggered.current = true;
+
+            // Get anonymous id
+            let anonId = localStorage.getItem("anonViewerId");
+            if (!anonId) {
+              anonId = "guest_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem("anonViewerId", anonId);
+            }
+
+            API.post(`/wishes/${wish._id}/view`, { anonViewerId: anonId })
+              .then(() => {
+                if (cardRef.current && observer) {
+                  observer.unobserve(cardRef.current);
+                }
+              })
+              .catch((err) => console.error("Error logging view from catalog card:", err));
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => {
+      if (cardRef.current && observer) {
+        observer.unobserve(cardRef.current);
+      }
+    };
+  }, [wish._id, currentUser]);
+
+  return (
+    <div ref={cardRef} className={`p-6 rounded-2xl border flex flex-col justify-between ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+      <div>
+        <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{wish.category}</span>
+        <h4 className="font-extrabold text-base mt-2">{wish.title}</h4>
+        <p className="text-xs text-slate-400 mt-1">{wish.description}</p>
+        <div className="mt-3 text-xs text-slate-450 border-b border-slate-850 dark:border-slate-800 pb-3 mb-3">
+          <p>Budget: <strong>₹{wish.budget}/day</strong></p>
+          <p>Duration: <strong>{wish.durationDays} Days</strong></p>
+        </div>
+      </div>
+
+      {/* Submit Offer Quote or Views / Insights Display */}
+      <div className="mt-auto">
+        {isCreator ? (
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+            <a href="#insights" className="text-xs text-indigo-400 hover:underline font-bold">
+              📊 Insights
+            </a>
+            <span className="text-xs text-slate-400">
+              views: <strong className="text-indigo-400">{wish.views || 0}</strong>
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-2 mb-4">
+            <button onClick={() => handlePitchQuote(wish._id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded-xl transition-all duration-200 active:scale-95">
+              Offer
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* List of Incoming quote offers for creator */}
+      {isCreator && wish.offers && wish.offers.length > 0 && (
+        <div className="space-y-2 bg-slate-950 p-3 rounded-2xl mt-4">
+          <span className="text-[9px] font-bold text-indigo-400 block">PITCHED OFFERS ({wish.offers.length})</span>
+          {wish.offers.map(offer => (
+            <div key={offer._id} className="flex justify-between items-center text-xs border-b border-slate-900 pb-2 last:border-0 last:pb-0">
+              <div>
+                <p className="font-bold">₹{offer.quoteAmount}/day</p>
+                <p className="text-[10px] text-slate-400">{offer.productDetails}</p>
+              </div>
+              <button onClick={() => handleAcceptOffer(wish._id, offer._id)} className="bg-indigo-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg">
+                Accept Offer
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function RequestedCatalogPage() {
   const navigate = useNavigate();
@@ -9,6 +111,7 @@ export default function RequestedCatalogPage() {
   const [wishes, setWishes] = useState([]);
   const [pitchAmount, setPitchAmount] = useState({});
   const [pitchDetails, setPitchDetails] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [maxPrice, setMaxPrice] = useState(1000);
@@ -32,6 +135,13 @@ export default function RequestedCatalogPage() {
     syncWishes();
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
     setBookmarkedIds(existing.map(x => x.id));
+
+    // Fetch logged in user profile
+    if (localStorage.getItem("token")) {
+      API.get("/auth/me")
+        .then(res => setCurrentUser(res.data))
+        .catch(err => console.error("Error fetching user profile:", err));
+    }
   }, []);
 
   const triggerToast = (msg) => {
@@ -62,17 +172,11 @@ export default function RequestedCatalogPage() {
   };
 
   const handlePitchQuote = async (wishId) => {
-    const amount = pitchAmount[wishId];
-    const details = pitchDetails[wishId];
-    if (!amount) return;
     try {
       await API.post(`/wishes/${wishId}/pitch`, {
-        quoteAmount: Number(amount),
-        productDetails: details || "I have this item in clean condition."
+        productDetails: "I have this item in clean condition."
       });
-      triggerToast("Quote proposal successfully pitched to borrower!");
-      setPitchAmount(prev => ({ ...prev, [wishId]: "" }));
-      setPitchDetails(prev => ({ ...prev, [wishId]: "" }));
+      triggerToast("Offer proposal successfully pitched to borrower!");
       syncWishes();
     } catch (err) {
       triggerToast("Failed to pitch quote");
@@ -172,58 +276,14 @@ export default function RequestedCatalogPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {filteredRequests.map(wish => (
-                <div key={wish._id} className={`p-6 rounded-2xl border ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
-                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{wish.category}</span>
-                  <h4 className="font-extrabold text-base mt-2">{wish.title}</h4>
-                  <p className="text-xs text-slate-400 mt-1">{wish.description}</p>
-                  <div className="mt-3 text-xs text-slate-450 border-b border-slate-800 pb-3 mb-3">
-                    <p>Budget: <strong>₹{wish.budget}/day</strong></p>
-                    <p>Duration: <strong>{wish.durationDays} Days</strong></p>
-                  </div>
-
-                  {/* Submit Offer Quote */}
-                  <div className="space-y-2 mb-4">
-                    <span className="text-[10px] font-bold uppercase text-slate-400">Submit Offer Proposal</span>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        placeholder="Quote ₹/day"
-                        value={pitchAmount[wish._id] || ""}
-                        onChange={(e) => setPitchAmount(prev => ({ ...prev, [wish._id]: e.target.value }))}
-                        className={`w-24 px-3 py-2 rounded-xl border text-xs focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Condition / details"
-                        value={pitchDetails[wish._id] || ""}
-                        onChange={(e) => setPitchDetails(prev => ({ ...prev, [wish._id]: e.target.value }))}
-                        className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none transition-colors ${isNight ? "bg-black border-slate-800 text-white placeholder-slate-500 caret-white" : "bg-white border-slate-300 text-black placeholder-slate-400 caret-black"}`}
-                      />
-                      <button onClick={() => handlePitchQuote(wish._id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-2 rounded-xl">
-                        Offer
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* List of Incoming quote offers for creator */}
-                  {wish.offers && wish.offers.length > 0 && (
-                    <div className="space-y-2 bg-slate-950 p-3 rounded-2xl">
-                      <span className="text-[9px] font-bold text-indigo-400 block">PITCHED OFFERS ({wish.offers.length})</span>
-                      {wish.offers.map(offer => (
-                        <div key={offer._id} className="flex justify-between items-center text-xs border-b border-slate-900 pb-2 last:border-0 last:pb-0">
-                          <div>
-                            <p className="font-bold">₹{offer.quoteAmount}/day</p>
-                            <p className="text-[10px] text-slate-400">{offer.productDetails}</p>
-                          </div>
-                          <button onClick={() => handleAcceptOffer(wish._id, offer._id)} className="bg-indigo-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg">
-                            Accept Offer
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                </div>
+                <WishCard
+                  key={wish._id}
+                  wish={wish}
+                  currentUser={currentUser}
+                  isNight={isNight}
+                  handlePitchQuote={handlePitchQuote}
+                  handleAcceptOffer={handleAcceptOffer}
+                />
               ))}
             </div>
           )}

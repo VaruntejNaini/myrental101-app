@@ -103,6 +103,48 @@ const getImageUrl = (image) => {
 const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const [showFadeMsg, setShowFadeMsg] = useState(false);
+  const cardRef = useRef(null);
+  const hasTriggered = useRef(false);
+
+  useEffect(() => {
+    if (item.rowType !== "Wishlist" || hasTriggered.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !hasTriggered.current) {
+            hasTriggered.current = true;
+            
+            // Get anonymous id
+            let anonId = localStorage.getItem("anonViewerId");
+            if (!anonId) {
+              anonId = "guest_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem("anonViewerId", anonId);
+            }
+
+            API.post(`/wishes/${item.id}/view`, { anonViewerId: anonId })
+              .then(() => {
+                if (cardRef.current && observer) {
+                  observer.unobserve(cardRef.current);
+                }
+              })
+              .catch((err) => console.error("Error logging view from landing card:", err));
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => {
+      if (cardRef.current && observer) {
+        observer.unobserve(cardRef.current);
+      }
+    };
+  }, [item.id, item.rowType]);
 
   // Fallback slider images or static emoji display
   const images = item.images || [];
@@ -145,6 +187,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
 
   return (
     <div 
+      ref={cardRef}
       onClick={() => onCardClick?.(item)}
       className={`flex-shrink-0 w-[280px] sm:w-[320px] group relative rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 overflow-hidden border ${
         isNight ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-800"

@@ -9,6 +9,9 @@ const wishSchema = new mongoose.Schema(
     durationDays: { type: Number, required: true },
     creator: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     status: { type: String, enum: ["ACTIVE", "FULFILLED", "EXPIRED"], default: "ACTIVE", index: true },
+    views: { type: Number, default: 0 },
+    viewedByUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    viewedByGuests: [{ type: String }],
     offers: [
       {
         owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

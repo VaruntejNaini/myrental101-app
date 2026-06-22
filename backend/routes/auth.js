@@ -9,6 +9,20 @@ import User from "../models/User.js";
 import { verifyToken } from "../middleware/auth.js";
 
 const router = express.Router();
+const OTP_TTL_MS = 10 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+
+const createOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const sanitizeUser = (user) => {
+  const plain = user.toObject ? user.toObject() : { ...user };
+  delete plain.password;
+  delete plain.emailOtp;
+  delete plain.mobileOtp;
+  return plain;
+};
+
+const isOtpExpired = (expiry) => !expiry || new Date() > new Date(expiry);
 
 // Define rate limiter to enforce a 60-second cooldown per IP for OTP requests
 const otpRequestLimiter = rateLimit({
@@ -53,8 +67,6 @@ router.post("/register", async (req, res) => {
 
   const { name, email, password } = req.body;
 
-  console.log("REGISTER:", req.body);
-
   try {
 
     // CHECK USER EXISTS
@@ -79,8 +91,6 @@ router.post("/register", async (req, res) => {
       password: hashed,
     });
 
-    console.log("USER CREATED:", user);
-
     res.json({
       msg: "User registered successfully",
     });
@@ -103,8 +113,6 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
 
   const { email, password } = req.body;
-
-  console.log("LOGIN:", req.body);
 
   try {
 
@@ -144,6 +152,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       {
         id: user._id,
+        role: user.role,
       },
       process.env.JWT_SECRET,
       {
@@ -155,12 +164,10 @@ router.post("/login", async (req, res) => {
 
     res.json({
       token,
-      user,
+      user: sanitizeUser(user),
     });
 
   } catch (err) {
-
-    console.log("LOGIN ERROR:", err);
 
     res.status(500).json({
       msg: err.message,
@@ -186,14 +193,14 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
     }
 
     // GENERATE OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log("EMAIL OTP (Sent to user):", otp);
+    const otp = createOtp();
 
     // HASH AND SAVE OTP
     const hashedOtp = await bcrypt.hash(otp, 10);
     user.emailOtp = hashedOtp;
+    user.emailOtpExpiry = new Date(Date.now() + OTP_TTL_MS);
+    user.emailOtpAttempts = 0;
     await user.save();
-    console.log("SUCCESSFULLY SAVED HASHED EMAIL OTP TO MONGODB:", user.emailOtp);
 
     // SEND EMAIL with raw plain-text OTP
     await transporter.sendMail({
@@ -246,14 +253,14 @@ router.post("/send-mobile-otp", async (req, res) => {
       });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log("MOBILE OTP (Sent to user):", otp);
+    const otp = createOtp();
 
     const hashedOtp = await bcrypt.hash(otp, 10);
     user.phone = phone;
     user.mobileOtp = hashedOtp;
+    user.mobileOtpExpiry = new Date(Date.now() + OTP_TTL_MS);
+    user.mobileOtpAttempts = 0;
     await user.save();
-    console.log("SUCCESSFULLY SAVED HASHED MOBILE OTP TO MONGODB:", user.mobileOtp);
 
     res.json({
       msg: "Mobile OTP sent successfully",
@@ -283,8 +290,21 @@ router.post("/verify-mobile-otp", async (req, res) => {
       });
     }
 
+    if (isOtpExpired(user.mobileOtpExpiry)) {
+      user.mobileOtp = "";
+      user.mobileOtpExpiry = null;
+      await user.save();
+      return res.status(400).json({ msg: "Mobile OTP expired" });
+    }
+
+    if (user.mobileOtpAttempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({ msg: "Too many incorrect attempts. Request a new OTP." });
+    }
+
     const isMatch = user.mobileOtp ? await bcrypt.compare(otp, user.mobileOtp) : false;
     if (!isMatch) {
+      user.mobileOtpAttempts += 1;
+      await user.save();
       return res.status(400).json({
         msg: "Invalid mobile OTP",
       });
@@ -292,6 +312,8 @@ router.post("/verify-mobile-otp", async (req, res) => {
 
     user.isMobileVerified = true;
     user.mobileOtp = "";
+    user.mobileOtpExpiry = null;
+    user.mobileOtpAttempts = 0;
     await user.save();
 
     res.json({
@@ -323,9 +345,22 @@ router.post("/verify-email-otp", async (req, res) => {
       });
     }
 
+    if (isOtpExpired(user.emailOtpExpiry)) {
+      user.emailOtp = "";
+      user.emailOtpExpiry = null;
+      await user.save();
+      return res.status(400).json({ msg: "OTP expired" });
+    }
+
+    if (user.emailOtpAttempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({ msg: "Too many incorrect attempts. Request a new OTP." });
+    }
+
     // INVALID OTP using cryptographic comparison
     const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
     if (!isMatch) {
+      user.emailOtpAttempts += 1;
+      await user.save();
       return res.status(400).json({
         msg: "Invalid OTP",
       });
@@ -334,12 +369,15 @@ router.post("/verify-email-otp", async (req, res) => {
     // SUCCESS
     user.isEmailVerified = true;
     user.emailOtp = "";
+    user.emailOtpExpiry = null;
+    user.emailOtpAttempts = 0;
     await user.save();
 
     // RESPONSE
     const token = jwt.sign(
       {
         id: user._id,
+        role: user.role,
       },
       process.env.JWT_SECRET,
       {
@@ -350,7 +388,7 @@ router.post("/verify-email-otp", async (req, res) => {
     res.json({
       msg: "Email verified successfully",
       token,
-      user
+      user: sanitizeUser(user)
     });
 
   } catch (err) {
@@ -377,8 +415,21 @@ router.post("/verify-reset-otp", async (req, res) => {
       return res.status(404).json({ msg: "User not found" });
     }
 
+    if (isOtpExpired(user.emailOtpExpiry)) {
+      user.emailOtp = "";
+      user.emailOtpExpiry = null;
+      await user.save();
+      return res.status(400).json({ msg: "OTP expired" });
+    }
+
+    if (user.emailOtpAttempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({ msg: "Too many incorrect attempts. Request a new OTP." });
+    }
+
     const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
     if (!isMatch) {
+      user.emailOtpAttempts += 1;
+      await user.save();
       return res.status(400).json({ msg: "Invalid OTP" });
     }
 
@@ -405,8 +456,21 @@ router.post("/reset-password", async (req, res) => {
     }
 
     // Verify OTP again for security before applying password change
+    if (isOtpExpired(user.emailOtpExpiry)) {
+      user.emailOtp = "";
+      user.emailOtpExpiry = null;
+      await user.save();
+      return res.status(400).json({ msg: "OTP expired" });
+    }
+
+    if (user.emailOtpAttempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({ msg: "Too many incorrect attempts. Request a new OTP." });
+    }
+
     const isMatch = user.emailOtp ? await bcrypt.compare(otp, user.emailOtp) : false;
     if (!isMatch) {
+      user.emailOtpAttempts += 1;
+      await user.save();
       return res.status(400).json({ msg: "Invalid or expired OTP" });
     }
 
@@ -414,6 +478,8 @@ router.post("/reset-password", async (req, res) => {
     const hashed = await bcrypt.hash(newPassword, 10);
     user.password = hashed;
     user.emailOtp = ""; // Clear OTP
+    user.emailOtpExpiry = null;
+    user.emailOtpAttempts = 0;
     user.isEmailVerified = true; // Auto-verify email upon password recovery
     await user.save();
 
@@ -457,20 +523,17 @@ router.post("/google", async (req, res) => {
         password: hashedPassword,
         isEmailVerified: true, // Pre-verified by Google
       });
-      console.log("GOOGLE SIGNUP SUCCESS:", user.email);
-    } else {
-      console.log("GOOGLE LOGIN SUCCESS:", user.email);
     }
 
     const token = jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({
       token,
-      user,
+      user: sanitizeUser(user),
     });
   } catch (err) {
     console.error("GOOGLE LOGIN ERROR:", err);

@@ -1,6 +1,141 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { broadcastAddressUpdate } from "../utils/addressSync";
+
+// Pure validator functions
+const validateFirstName = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "First name is required.";
+  if (trimmed.length < 2) return "First name must be at least 2 characters.";
+  if (trimmed.length > 50) return "First name cannot exceed 50 characters.";
+  if (!/[A-Za-z]/.test(trimmed)) {
+    return "First name must contain at least one alphabetic character.";
+  }
+  if (!/^[A-Za-z\s.\-]+$/.test(trimmed)) {
+    return "First name can only contain letters, spaces, periods, and hyphens.";
+  }
+  return "";
+};
+
+const validateLastName = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Last name is required.";
+  if (trimmed.length < 2) return "Last name must be at least 2 characters.";
+  if (trimmed.length > 50) return "Last name cannot exceed 50 characters.";
+  if (!/[A-Za-z]/.test(trimmed)) {
+    return "Last name must contain at least one alphabetic character.";
+  }
+  if (!/^[A-Za-z\s.\-]+$/.test(trimmed)) {
+    return "Last name can only contain letters, spaces, periods, and hyphens.";
+  }
+  return "";
+};
+
+const validateMobileNumber = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Mobile number is required.";
+  if (!/^[6-9]\d{9}$/.test(trimmed)) {
+    return "Mobile number must be a valid 10-digit Indian number starting with 6-9.";
+  }
+  return "";
+};
+
+const validateHouseFlatNumber = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Flat/House number is required.";
+  if (trimmed.length < 2) return "Flat/House number must be at least 2 characters.";
+  if (trimmed.length > 100) return "Flat/House number cannot exceed 100 characters.";
+  if (!/^[A-Za-z0-9\s/\-,.]+$/.test(trimmed)) {
+    return "Flat/House number can only contain letters, numbers, spaces, and / - , .";
+  }
+  if (!/[A-Za-z/\-,.]/.test(trimmed)) {
+    return "Flat/House number must contain at least one letter or separator (/ - , .).";
+  }
+  return "";
+};
+
+const validateLandmark = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return ""; // Optional
+  if (trimmed.length < 3) return "Landmark must be at least 3 characters.";
+  if (trimmed.length > 150) return "Landmark cannot exceed 150 characters.";
+  if (/^\d+$/.test(trimmed.replace(/[\s\-,./]/g, ""))) {
+    return "Landmark cannot be numeric-only.";
+  }
+  return "";
+};
+
+const validateLocality = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Locality/Street is required.";
+  if (trimmed.length < 3) return "Locality/Street must be at least 3 characters.";
+  if (trimmed.length > 150) return "Locality/Street cannot exceed 150 characters.";
+  if (!/^[A-Za-z0-9\s,\.\-\/]+$/.test(trimmed)) {
+    return "Locality/Street can only contain letters, numbers, spaces, and , . - /";
+  }
+  if (/^\d+$/.test(trimmed.replace(/[\s,\.\-\/]/g, ""))) {
+    return "Locality/Street cannot be numeric-only.";
+  }
+  return "";
+};
+
+const validateCity = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "City is required.";
+  if (trimmed.length < 2) return "City must be at least 2 characters.";
+  if (trimmed.length > 80) return "City cannot exceed 80 characters.";
+  if (!/^[A-Za-z\s.\-]+$/.test(trimmed)) {
+    return "City can only contain letters, spaces, periods, and hyphens.";
+  }
+  return "";
+};
+
+const validateState = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "State is required.";
+  if (trimmed.length < 2) return "State must be at least 2 characters.";
+  if (trimmed.length > 80) return "State cannot exceed 80 characters.";
+  if (!/^[A-Za-z\s.\-]+$/.test(trimmed)) {
+    return "State can only contain letters, spaces, periods, and hyphens.";
+  }
+  return "";
+};
+
+const validatePincode = (value) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Pincode is required.";
+  if (!/^\d{6}$/.test(trimmed)) {
+    return "Pincode must be exactly 6 digits.";
+  }
+  return "";
+};
+
+const validateAddressDescription = (value) => {
+  const trimmed = (value || "").trim();
+  if (trimmed.length > 300) {
+    return "Delivery instructions cannot exceed 300 characters.";
+  }
+  return "";
+};
+
+const sanitizeString = (val) => {
+  if (typeof val !== "string") return val;
+  return val.trim().replace(/\s+/g, " ");
+};
+
+const validators = {
+  firstName: validateFirstName,
+  lastName: validateLastName,
+  mobileNumber: validateMobileNumber,
+  houseFlatNumber: validateHouseFlatNumber,
+  landmark: validateLandmark,
+  locality: validateLocality,
+  city: validateCity,
+  state: validateState,
+  pincode: validatePincode,
+  addressDescription: validateAddressDescription
+};
 
 export default function AddressManagement() {
   const navigate = useNavigate();
@@ -46,6 +181,106 @@ export default function AddressManagement() {
   const searchInputRef = useRef(null);
   const [map, setMap] = useState(null);
   const [marker, setMarker] = useState(null);
+
+  // Validation States
+  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState({});
+
+  // Input Refs for Programmatic Focus/Scroll
+  const firstNameRef = useRef(null);
+  const lastNameRef = useRef(null);
+  const mobileNumberRef = useRef(null);
+  const houseFlatNumberRef = useRef(null);
+  const landmarkRef = useRef(null);
+  const localityRef = useRef(null);
+  const cityRef = useRef(null);
+  const stateRef = useRef(null);
+  const pincodeRef = useRef(null);
+  const addressDescriptionRef = useRef(null);
+
+  const fieldRefs = {
+    firstName: firstNameRef,
+    lastName: lastNameRef,
+    mobileNumber: mobileNumberRef,
+    houseFlatNumber: houseFlatNumberRef,
+    landmark: landmarkRef,
+    locality: localityRef,
+    city: cityRef,
+    state: stateRef,
+    pincode: pincodeRef,
+    addressDescription: addressDescriptionRef
+  };
+
+  // Real-time validation sync
+  useEffect(() => {
+    const newErrors = {};
+    Object.keys(validators).forEach(field => {
+      newErrors[field] = validators[field](formData[field]);
+    });
+    setErrors(newErrors);
+  }, [formData]);
+
+  const handleFieldChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleFieldBlur = (field) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleMobileKeyDown = (e) => {
+    const blockedKeys = ["e", "E", "+", "-", ".", " "];
+    if (blockedKeys.includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const handleMobileChange = (e) => {
+    let val = e.target.value;
+    val = val.replace(/\D/g, "").slice(0, 10);
+    handleFieldChange("mobileNumber", val);
+  };
+
+  const handlePincodeChange = (e) => {
+    let val = e.target.value;
+    val = val.replace(/\D/g, "").slice(0, 6);
+    handleFieldChange("pincode", val);
+  };
+
+  const getFieldClass = (field) => {
+    const base = "w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ";
+    const theme = isNight 
+      ? "bg-slate-950 text-white " 
+      : "bg-slate-50 text-slate-800 ";
+      
+    if (touched[field]) {
+      if (errors[field]) {
+        return base + theme + "border-rose-500 focus:border-rose-500";
+      } else {
+        return base + theme + "border-emerald-500 focus:border-emerald-500";
+      }
+    }
+    
+    const defaultBorder = isNight 
+      ? "border-slate-850 focus:border-indigo-500" 
+      : "border-slate-200 focus:border-indigo-500";
+      
+    return base + theme + defaultBorder;
+  };
+
+  const hasErrors = Object.values(errors).some(err => err !== "");
+  const isMissingRequired = 
+    !formData.firstName ||
+    !formData.lastName ||
+    !formData.mobileNumber ||
+    !formData.houseFlatNumber ||
+    !formData.locality ||
+    !formData.city ||
+    !formData.state ||
+    !formData.pincode;
+
+  const isSubmitDisabled = hasErrors || isMissingRequired;
 
   // Load Google Maps JavaScript API dynamically
   // useEffect(() => {
@@ -224,6 +459,13 @@ export default function AddressManagement() {
           state: state || prev.state,
           fullAddress: formattedAddress || result.formatted_address
         }));
+        setTouched(prev => ({
+          ...prev,
+          ...(postalCode ? { pincode: true } : {}),
+          ...(locality ? { locality: true } : {}),
+          ...(city ? { city: true } : {}),
+          ...(state ? { state: true } : {})
+        }));
       } else {
         console.error("Reverse geocoding failed due to:", status);
         triggerToast("Invalid reverse geocoding response. Pin location adjusted.");
@@ -270,14 +512,68 @@ export default function AddressManagement() {
   const handleSave = async (e) => {
     e.preventDefault();
 
-    if (!formData.firstName || !formData.lastName || !formData.mobileNumber || !formData.houseFlatNumber || !formData.locality || !formData.city) {
-      triggerToast("Please fill in all required fields.");
+    // Run every validator again
+    const newErrors = {};
+    let firstInvalidField = null;
+
+    const fieldOrder = [
+      "firstName",
+      "lastName",
+      "mobileNumber",
+      "houseFlatNumber",
+      "landmark",
+      "locality",
+      "pincode",
+      "city",
+      "state",
+      "addressDescription"
+    ];
+
+    for (const field of fieldOrder) {
+      const error = validators[field](formData[field]);
+      newErrors[field] = error;
+      if (error && !firstInvalidField) {
+        firstInvalidField = field;
+      }
+    }
+
+    setErrors(newErrors);
+    
+    // Mark all fields as touched to display validation styling
+    const allTouched = {};
+    fieldOrder.forEach(field => {
+      allTouched[field] = true;
+    });
+    setTouched(allTouched);
+
+    if (firstInvalidField) {
+      const ref = fieldRefs[firstInvalidField];
+      if (ref && ref.current) {
+        ref.current.focus();
+        ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      triggerToast("Please check and correct the invalid fields highlighted in red.");
       return;
     }
 
+    // Sanitization Rules (trim & space collapse)
+    const sanitizedFormData = {
+      ...formData,
+      firstName: sanitizeString(formData.firstName),
+      lastName: sanitizeString(formData.lastName),
+      mobileNumber: sanitizeString(formData.mobileNumber),
+      houseFlatNumber: sanitizeString(formData.houseFlatNumber),
+      landmark: sanitizeString(formData.landmark),
+      locality: sanitizeString(formData.locality),
+      city: sanitizeString(formData.city),
+      state: sanitizeString(formData.state),
+      pincode: sanitizeString(formData.pincode),
+      addressDescription: sanitizeString(formData.addressDescription)
+    };
+
     // Generate combined address text
-    const completeAddressStr = `${formData.houseFlatNumber}, ${formData.locality}, ${formData.landmark ? formData.landmark + ", " : ""}${formData.city}, ${formData.state} - ${formData.pincode}`;
-    const payload = { ...formData, fullAddress: completeAddressStr };
+    const completeAddressStr = `${sanitizedFormData.houseFlatNumber}, ${sanitizedFormData.locality}, ${sanitizedFormData.landmark ? sanitizedFormData.landmark + ", " : ""}${sanitizedFormData.city}, ${sanitizedFormData.state} - ${sanitizedFormData.pincode}`;
+    const payload = { ...sanitizedFormData, fullAddress: completeAddressStr };
 
     try {
       if (modalType === "new") {
@@ -288,7 +584,8 @@ export default function AddressManagement() {
         triggerToast("Address updated successfully! 🎉");
       }
       setModalOpen(false);
-      fetchAddresses();
+      await fetchAddresses();
+      broadcastAddressUpdate({ type: modalType === "new" ? "created" : "updated" });
     } catch (err) {
       console.error(err);
       triggerToast(err.response?.data?.msg || "Failed to save address details.");
@@ -314,6 +611,8 @@ export default function AddressManagement() {
       longitude: addr.longitude || 78.486671,
       isDefault: addr.isDefault
     });
+    setTouched({});
+    setErrors({});
     setEditingId(addr._id);
     setModalType("edit");
     setModalOpen(true);
@@ -324,7 +623,8 @@ export default function AddressManagement() {
     try {
       await API.put(`/addresses/${id}/default`);
       triggerToast("Default address updated!");
-      fetchAddresses();
+      await fetchAddresses();
+      broadcastAddressUpdate({ type: "default_changed" });
     } catch (err) {
       console.error(err);
       triggerToast("Failed to update default address.");
@@ -338,7 +638,8 @@ export default function AddressManagement() {
       await API.delete(`/addresses/${deleteConfirmId}`);
       triggerToast("Address removed successfully.");
       setDeleteConfirmId(null);
-      fetchAddresses();
+      await fetchAddresses();
+      broadcastAddressUpdate({ type: "deleted" });
     } catch (err) {
       console.error(err);
       triggerToast("Failed to delete address.");
@@ -424,6 +725,8 @@ export default function AddressManagement() {
                   longitude: 78.486671,
                   isDefault: false
                 });
+                setTouched({});
+                setErrors({});
                 setModalType("new");
                 setModalOpen(true);
               }}
@@ -457,10 +760,12 @@ export default function AddressManagement() {
                     longitude: 78.486671,
                     isDefault: false
                   });
+                  setTouched({});
+                  setErrors({});
                   setModalType("new");
                   setModalOpen(true);
                 }}
-                className="bg-indigo-650 hover:bg-indigo-700 text-white font-black text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow"
+                className="bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-500 dark:to-indigo-500 hover:from-violet-700 hover:to-indigo-700 dark:hover:from-violet-400 dark:hover:to-indigo-400 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-violet-500/20 hover:shadow-lg hover:shadow-violet-500/30 focus:ring-4 focus:ring-violet-300 focus:outline-none whitespace-nowrap cursor-pointer"
               >
                 + New Address
               </button>
@@ -619,137 +924,210 @@ export default function AddressManagement() {
                     ✕
                   </button>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">First Name *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      placeholder="John"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={firstNameRef}
+                        required
+                        value={formData.firstName}
+                        onChange={(e) => handleFieldChange("firstName", e.target.value)}
+                        onBlur={() => handleFieldBlur("firstName")}
+                        placeholder="John"
+                        className={getFieldClass("firstName")}
+                      />
+                      {touched.firstName && !errors.firstName && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.firstName && errors.firstName && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.firstName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Last Name *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      placeholder="Doe"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-855 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={lastNameRef}
+                        required
+                        value={formData.lastName}
+                        onChange={(e) => handleFieldChange("lastName", e.target.value)}
+                        onBlur={() => handleFieldBlur("lastName")}
+                        placeholder="Doe"
+                        className={getFieldClass("lastName")}
+                      />
+                      {touched.lastName && !errors.lastName && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.lastName && errors.lastName && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.lastName}</p>
+                    )}
                   </div>
                 </div>
-
+ 
                 <div className="mb-4">
                   <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Mobile Number *</label>
-                  <input 
-                    type="tel"
-                    required
-                    value={formData.mobileNumber}
-                    onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value.replace(/\D/g, "") })}
-                    placeholder="9876543210"
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                      isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                    }`}
-                  />
+                  <div className="relative">
+                    <input 
+                      type="tel"
+                      ref={mobileNumberRef}
+                      required
+                      maxLength={10}
+                      value={formData.mobileNumber}
+                      onKeyDown={handleMobileKeyDown}
+                      onChange={handleMobileChange}
+                      onBlur={() => handleFieldBlur("mobileNumber")}
+                      placeholder="9876543210"
+                      className={getFieldClass("mobileNumber")}
+                    />
+                    {touched.mobileNumber && !errors.mobileNumber && (
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                    )}
+                  </div>
+                  {touched.mobileNumber && errors.mobileNumber && (
+                    <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.mobileNumber}</p>
+                  )}
                 </div>
-
+ 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Flat/House Number *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.houseFlatNumber}
-                      onChange={(e) => setFormData({ ...formData, houseFlatNumber: e.target.value })}
-                      placeholder="Flat 304, Building C"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={houseFlatNumberRef}
+                        required
+                        value={formData.houseFlatNumber}
+                        onChange={(e) => handleFieldChange("houseFlatNumber", e.target.value)}
+                        onBlur={() => handleFieldBlur("houseFlatNumber")}
+                        placeholder="Flat 304, Building C"
+                        className={getFieldClass("houseFlatNumber")}
+                      />
+                      {touched.houseFlatNumber && !errors.houseFlatNumber && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.houseFlatNumber && errors.houseFlatNumber && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.houseFlatNumber}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Landmark</label>
-                    <input 
-                      type="text"
-                      value={formData.landmark}
-                      onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
-                      placeholder="e.g. Near Metro Station"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={landmarkRef}
+                        value={formData.landmark}
+                        onChange={(e) => handleFieldChange("landmark", e.target.value)}
+                        onBlur={() => handleFieldBlur("landmark")}
+                        placeholder="e.g. Near Metro Station"
+                        className={getFieldClass("landmark")}
+                      />
+                      {touched.landmark && !errors.landmark && formData.landmark && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.landmark && errors.landmark && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.landmark}</p>
+                    )}
                   </div>
                 </div>
-
+ 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Locality/Street *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.locality}
-                      onChange={(e) => setFormData({ ...formData, locality: e.target.value })}
-                      placeholder="Kondapur Road"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={localityRef}
+                        required
+                        value={formData.locality}
+                        onChange={(e) => handleFieldChange("locality", e.target.value)}
+                        onBlur={() => handleFieldBlur("locality")}
+                        placeholder="Kondapur Road"
+                        className={getFieldClass("locality")}
+                      />
+                      {touched.locality && !errors.locality && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.locality && errors.locality && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.locality}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Pincode *</label>
-                    <input 
-                      type="text"
-                      required
-                      maxLength={6}
-                      value={formData.pincode}
-                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, "") })}
-                      placeholder="500084"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={pincodeRef}
+                        required
+                        maxLength={6}
+                        value={formData.pincode}
+                        onChange={handlePincodeChange}
+                        onBlur={() => handleFieldBlur("pincode")}
+                        placeholder="500084"
+                        className={getFieldClass("pincode")}
+                      />
+                      {touched.pincode && !errors.pincode && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.pincode && errors.pincode && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.pincode}</p>
+                    )}
                   </div>
                 </div>
-
+ 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">City *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      placeholder="Hyderabad"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={cityRef}
+                        required
+                        value={formData.city}
+                        onChange={(e) => handleFieldChange("city", e.target.value)}
+                        onBlur={() => handleFieldBlur("city")}
+                        placeholder="Hyderabad"
+                        className={getFieldClass("city")}
+                      />
+                      {touched.city && !errors.city && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.city && errors.city && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.city}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">State *</label>
-                    <input 
-                      type="text"
-                      required
-                      value={formData.state}
-                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                      placeholder="Telangana"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold focus:outline-none transition ${
-                        isNight ? "bg-slate-950 border-slate-850 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
-                      }`}
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        ref={stateRef}
+                        required
+                        value={formData.state}
+                        onChange={(e) => handleFieldChange("state", e.target.value)}
+                        onBlur={() => handleFieldBlur("state")}
+                        placeholder="Telangana"
+                        className={getFieldClass("state")}
+                      />
+                      {touched.state && !errors.state && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                      )}
+                    </div>
+                    {touched.state && errors.state && (
+                      <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.state}</p>
+                    )}
                   </div>
                 </div>
-
+ 
                 <div className="mb-4">
                   <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Address Type</label>
                   <div className="flex gap-2">
@@ -761,7 +1139,7 @@ export default function AddressManagement() {
                         className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all border cursor-pointer ${
                           formData.addressType === type
                             ? "bg-indigo-500 text-white border-indigo-500 shadow-md"
-                            : (isNight ? "bg-slate-950 border-slate-800 text-slate-400 hover:text-white" : "bg-white border-slate-200 text-slate-650 hover:bg-slate-50")
+                            : (isNight ? "bg-slate-950 border-slate-880 text-slate-400 hover:text-white" : "bg-white border-slate-200 text-slate-650 hover:bg-slate-50")
                         }`}
                       >
                         {getIcon(type)} {type}
@@ -769,34 +1147,47 @@ export default function AddressManagement() {
                     ))}
                   </div>
                 </div>
-
+ 
                 <div className="mb-6">
                   <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Delivery Instructions / Description</label>
-                  <textarea 
-                    rows={2}
-                    value={formData.addressDescription}
-                    onChange={(e) => setFormData({ ...formData, addressDescription: e.target.value })}
-                    placeholder="e.g. Ring the bell, drop at reception, call before arrival..."
-                    className={`w-full border rounded-xl px-4 py-2.5 text-xs focus:outline-none resize-none transition-colors ${
-                      isNight ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-white border-slate-200 text-slate-800 focus:border-indigo-400"
-                    }`}
-                  />
+                  <div className="relative">
+                    <textarea 
+                      rows={2}
+                      ref={addressDescriptionRef}
+                      value={formData.addressDescription}
+                      onChange={(e) => handleFieldChange("addressDescription", e.target.value)}
+                      onBlur={() => handleFieldBlur("addressDescription")}
+                      placeholder="e.g. Ring the bell, drop at reception, call before arrival..."
+                      className={getFieldClass("addressDescription")}
+                    />
+                    {touched.addressDescription && !errors.addressDescription && formData.addressDescription && (
+                      <span className="absolute right-3.5 top-3.5 text-emerald-500 text-sm font-bold pointer-events-none">✓</span>
+                    )}
+                  </div>
+                  {touched.addressDescription && errors.addressDescription && (
+                    <p className="text-[10px] text-rose-500 mt-1 font-bold">{errors.addressDescription}</p>
+                  )}
                 </div>
               </div>
-
+ 
               <div className="flex gap-3 border-t dark:border-slate-850/60 pt-4">
                 <button 
                   type="button"
                   onClick={() => setModalOpen(false)}
                   className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                    isNight ? "border-slate-800 text-slate-400 hover:text-white" : "border-slate-200 text-slate-600 hover:text-slate-900"
+                    isNight ? "border-slate-800 text-slate-400 hover:text-white" : "border-slate-200 text-slate-650 hover:text-slate-900"
                   }`}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-bold hover:scale-102 active:scale-98 transition-all shadow-md cursor-pointer"
+                  disabled={isSubmitDisabled}
+                  className={`flex-1 py-3 text-white rounded-xl text-xs font-bold transition-all shadow-md ${
+                    isSubmitDisabled 
+                      ? "bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed opacity-50" 
+                      : "bg-gradient-to-r from-indigo-500 to-violet-500 hover:scale-102 active:scale-98 cursor-pointer"
+                  }`}
                 >
                   {modalType === "new" ? "Save Address" : "Save Changes"}
                 </button>

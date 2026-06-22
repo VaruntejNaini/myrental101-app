@@ -8,7 +8,7 @@ const notificationSchema = new mongoose.Schema(
     isRead: { type: Boolean, default: false, index: true },
     type: {
       type: String,
-      enum: ["NEGOTIATION", "SYSTEM", "ORDER"],
+      enum: ["NEGOTIATION", "SYSTEM", "ORDER", "OFFER_RETRACTED"],
       required: true,
     },
     link: { type: String },

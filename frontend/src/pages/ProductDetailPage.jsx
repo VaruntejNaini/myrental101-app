@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 export const getImageUrl = (image) => {
   if (!image) return "";
@@ -22,6 +23,9 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [similarProducts, setSimilarProducts] = useState([]);
   const [isNegotiationModalOpen, setIsNegotiationModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeNegotiationStatus, setActiveNegotiationStatus] = useState(null);
+  const [imgIndex, setImgIndex] = useState(0);
 
   const [userCoords, setUserCoords] = useState(null);
   const [coordsLoading, setCoordsLoading] = useState(true);
@@ -77,6 +81,40 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (token) {
+      API.get("/auth/me")
+        .then((userRes) => {
+          const user = userRes.data;
+          setCurrentUser(user);
+
+          return API.get("/rent/transactions").then((txRes) => {
+            const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
+            const activeTx = txRes.data.find(
+              (t) =>
+                activeStates.includes(t.status) &&
+                String(t.product?._id || t.product) === String(id) &&
+                String(t.borrower?._id || t.borrower) === String(user._id)
+            );
+            if (activeTx) {
+              setActiveNegotiationStatus(activeTx.status);
+            } else {
+              setActiveNegotiationStatus(null);
+            }
+          });
+        })
+        .catch((err) => console.error("Error fetching transactions in detail page:", err));
+    } else {
+      setCurrentUser(null);
+      setActiveNegotiationStatus(null);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    setImgIndex(0);
+  }, [id]);
+
+  useEffect(() => {
     if (product && product.category) {
       API.get(`/rent/products?category=${product.category}`)
         .then(res => {
@@ -94,6 +132,22 @@ export default function ProductDetailPage() {
     return () => clearTimeout(timer);
   }, [isNegotiationModalOpen]);
 
+  const images = product?.images?.length ? product.images : [];
+
+  const handlePrev = (e) => {
+    e.stopPropagation();
+    if (images.length > 1) {
+      setImgIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    }
+  };
+
+  const handleNext = (e) => {
+    e.stopPropagation();
+    if (images.length > 1) {
+      setImgIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    }
+  };
+
   const triggerToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
@@ -101,6 +155,10 @@ export default function ProductDetailPage() {
 
   const handleNegotiateClick = async () => {
     if (!product) return;
+    if (activeNegotiationStatus !== null) {
+      triggerToast("You already have an active negotiation for this product.");
+      return;
+    }
     try {
       await API.post("/rent/negotiate", {
         productId: id,
@@ -109,14 +167,24 @@ export default function ProductDetailPage() {
         dailyRate: product.rentalPrice,
         securityDeposit: product.securityDeposit
       });
+      setActiveNegotiationStatus("PENDING_NEGOTIATION");
       setIsNegotiationModalOpen(true);
     } catch (err) {
+      if (err.response?.status === 409) {
+        alert("You already have an active negotiation for this product.");
+        setActiveNegotiationStatus("PENDING_NEGOTIATION");
+        return;
+      }
       triggerToast(err.response?.data?.msg || "Negotiation request failed");
     }
   };
 
   const handleSecondHandNegotiateClick = async () => {
     if (!product) return;
+    if (activeNegotiationStatus !== null) {
+      triggerToast("You already have an active negotiation for this product.");
+      return;
+    }
     const offer = window.prompt(`Enter your custom buyout offer price for "${product.title}" (Current: ₹${product.rentalPrice}):`);
     if (!offer) return;
     const numericOffer = parseFloat(offer);
@@ -133,8 +201,14 @@ export default function ProductDetailPage() {
         dailyRate: numericOffer,
         securityDeposit: 0
       });
+      setActiveNegotiationStatus("PENDING_NEGOTIATION");
       setIsNegotiationModalOpen(true);
     } catch (err) {
+      if (err.response?.status === 409) {
+        alert("You already have an active negotiation for this product.");
+        setActiveNegotiationStatus("PENDING_NEGOTIATION");
+        return;
+      }
       triggerToast(err.response?.data?.msg || "Negotiation request failed");
     }
   };
@@ -200,6 +274,7 @@ export default function ProductDetailPage() {
   };
 
   console.log("Product State:", product);
+  const isOwner = currentUser && product && String(product.owner?._id || product.owner) === String(currentUser._id);
 
   if (loading) {
     return (
@@ -211,8 +286,18 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-        <p className="text-sm font-bold text-red-400">Product not found.</p>
+      <div className={`min-h-screen flex items-center justify-center ${isNight ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-800"}`}>
+        <div className="max-w-md p-8 rounded-3xl border text-center space-y-4 border-red-500/20 bg-red-500/5 shadow-xl">
+          <div className="text-4xl">🚫</div>
+          <h2 className="text-xl font-black text-red-500">Listing Unavailable</h2>
+          <p className="text-sm text-slate-400">This listing is no longer available.</p>
+          <button 
+            onClick={() => navigate("/dashboard")} 
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer transition-all active:scale-95"
+          >
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -246,13 +331,43 @@ export default function ProductDetailPage() {
         <div className={`p-8 rounded-3xl border text-center transition-all ${
           isNight ? "bg-slate-900/60 border-slate-850" : "bg-white border-slate-200/60 shadow-sm"
         }`}>
-          <div className={`w-48 h-48 md:w-64 md:h-64 mx-auto rounded-3xl flex items-center justify-center shadow-md overflow-hidden ${
+          <div className={`w-48 h-48 md:w-64 md:h-64 mx-auto rounded-3xl flex items-center justify-center shadow-md overflow-hidden relative group ${
             isNight ? "bg-gradient-to-br from-slate-800 to-slate-950" : "bg-gradient-to-br from-indigo-50 to-violet-50"
           }`}>
-            {product.images && product.images.length > 0 ? (
-              <img src={getImageUrl(product.images[0])} alt={product.title} className="w-full h-full object-cover" />
+            {images.length > 0 ? (
+              <img src={getImageUrl(images[imgIndex])} alt={product.title} className="w-full h-full object-cover" />
             ) : (
               <span className="text-[110px] select-none">{emoji}</span>
+            )}
+
+            {/* Carousel controls */}
+            {images.length > 1 && (
+              <>
+                <button 
+                  onClick={handlePrev}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer bg-slate-900/40 p-1.5 rounded-full hover:bg-slate-900/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200"
+                  title="Previous Image"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6 filter drop-shadow">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 15.75L3 12m0 0l3.75-3.75M3 12h18" />
+                  </svg>
+                </button>
+
+                <button 
+                  onClick={handleNext}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer bg-slate-900/40 p-1.5 rounded-full hover:bg-slate-900/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200"
+                  title="Next Image"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6 filter drop-shadow">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+                  </svg>
+                </button>
+
+                {/* Position indicator */}
+                <div className="absolute bottom-2 right-2 bg-slate-900/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full z-20 select-none backdrop-blur-sm border border-white/10">
+                  {imgIndex + 1} / {images.length}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -302,66 +417,101 @@ export default function ProductDetailPage() {
 
           {/* Actions grid */}
           <div className="space-y-3">
-            {/* 5. Rent / Buy Button */}
-            {product.status !== "AUCTION_ACTIVE" ? (
-              <button 
-                onClick={handleAction}
-                className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white font-extrabold text-xs py-4 rounded-2xl shadow-lg transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
-              >
-                {product.productType === "SECOND_HAND" ? (
-                  <span>Buy Out Now (₹{product.rentalPrice})</span>
-                ) : (
-                  <span>Rent Now (₹{product.rentalPrice * duration} Total)</span>
-                )}
-              </button>
+            {isOwner ? (
+              <div className={`p-6 rounded-2xl border text-center space-y-4 ${
+                isNight ? "bg-slate-900/80 border-indigo-500/30 text-white" : "bg-indigo-50/50 border-indigo-200/50 text-slate-800"
+              }`}>
+                <div className="text-3xl">📦</div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-indigo-500">This is your listing.</h3>
+                  <p className="text-xs text-slate-400">Manage it from your Dashboard.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/dashboard")}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  ← Back to Dashboard
+                </button>
+              </div>
             ) : (
-              <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs">
-                <span className="font-extrabold text-orange-500">🔥 SURGE DEMAND AUCTION ACTIVE</span>
-                <p className="text-slate-400 mt-1">Countdown: Ending soon. Top bid: <strong>₹{auction?.currentTopBid}</strong></p>
-                <form onSubmit={handlePlaceBid} className="mt-3 flex gap-2">
-                  <input
-                    type="number"
-                    value={bidAmount}
-                    onChange={(e) => setBidAmount(e.target.value)}
-                    placeholder={`Bid > ₹${auction?.currentTopBid}`}
-                    className={`flex-1 px-3 py-2 border rounded-xl focus:outline-none text-xs ${
-                      isNight ? "bg-slate-950 border-slate-800 text-white" : "bg-white border-slate-200"
-                    }`}
-                  />
-                  <button type="submit" className="bg-orange-500 text-white font-bold px-4 py-2 rounded-xl">
-                    Bid
+              <>
+                {/* 5. Rent / Buy Button */}
+                {product.status !== "AUCTION_ACTIVE" ? (
+                  <button 
+                    onClick={handleAction}
+                    className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white font-extrabold text-xs py-4 rounded-2xl shadow-lg transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {product.productType === "SECOND_HAND" ? (
+                      <span>Buy Out Now (₹{product.rentalPrice})</span>
+                    ) : (
+                      <span>Rent Now (₹{product.rentalPrice * duration} Total)</span>
+                    )}
                   </button>
-                </form>
-              </div>
-            )}
+                ) : (
+                  <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs">
+                    <span className="font-extrabold text-orange-500">🔥 SURGE DEMAND AUCTION ACTIVE</span>
+                    <p className="text-slate-400 mt-1">Countdown: Ending soon. Top bid: <strong>₹{auction?.currentTopBid}</strong></p>
+                    <form onSubmit={handlePlaceBid} className="mt-3 flex gap-2">
+                      <input
+                        type="number"
+                        value={bidAmount}
+                        onChange={(e) => setBidAmount(e.target.value)}
+                        placeholder={`Bid > ₹${auction?.currentTopBid}`}
+                        className={`flex-1 px-3 py-2 border rounded-xl focus:outline-none text-xs ${
+                          isNight ? "bg-slate-950 border-slate-800 text-white" : "bg-white border-slate-200"
+                        }`}
+                      />
+                      <button type="submit" className="bg-orange-500 text-white font-bold px-4 py-2 rounded-xl">
+                        Bid
+                      </button>
+                    </form>
+                  </div>
+                )}
 
-            {/* 6. Negotiate Button */}
-            {product.productType === "RENT" && product.status !== "AUCTION_ACTIVE" && (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={handleNegotiateClick}
-                  className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all cursor-pointer border flex items-center justify-center gap-2 ${
-                    isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  💬 Propose Custom Price Negotiation
-                </button>
-              </div>
-            )}
+                {/* 6. Negotiate Button */}
+                {product.productType === "RENT" && product.status !== "AUCTION_ACTIVE" && (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleNegotiateClick}
+                      disabled={activeNegotiationStatus !== null}
+                      className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all border flex items-center justify-center gap-2 ${
+                        activeNegotiationStatus !== null
+                          ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+                          : isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300 cursor-pointer" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                      }`}
+                    >
+                      {activeNegotiationStatus === "AWAITING_PAYMENT" || activeNegotiationStatus === "ACCEPTED"
+                        ? "✓ Accepted - Checkout Required"
+                        : activeNegotiationStatus !== null
+                        ? "✓ Negotiation Request Sent"
+                        : "💬 Propose Custom Price Negotiation"}
+                    </button>
+                  </div>
+                )}
 
-            {product.productType === "SECOND_HAND" && (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={handleSecondHandNegotiateClick}
-                  className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all cursor-pointer border flex items-center justify-center gap-2 ${
-                    isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  💬 Propose Buyout Offer Price
-                </button>
-              </div>
+                {product.productType === "SECOND_HAND" && (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleSecondHandNegotiateClick}
+                      disabled={activeNegotiationStatus !== null}
+                      className={`w-full text-xs font-bold py-3.5 rounded-2xl transition-all border flex items-center justify-center gap-2 ${
+                        activeNegotiationStatus !== null
+                          ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+                          : isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300 cursor-pointer" : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                      }`}
+                    >
+                      {activeNegotiationStatus === "AWAITING_PAYMENT" || activeNegotiationStatus === "ACCEPTED"
+                        ? "✓ Accepted - Checkout Required"
+                        : activeNegotiationStatus !== null
+                        ? "✓ Buyout Negotiation Sent"
+                        : "💬 Propose Buyout Offer Price"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

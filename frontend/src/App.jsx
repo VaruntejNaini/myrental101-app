@@ -15,6 +15,9 @@ import ProductDetailPage from "./pages/ProductDetailPage";
 import AddressManagement from "./pages/AddressManagement";
 import MyListings from "./pages/MyListings";
 import DesktopChatbox from "./components/DesktopChatbox";
+import RentCheckout from "./pages/RentCheckout";
+import AdminRoute from "./components/AdminRoute";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   useEffect(() => {
@@ -46,6 +49,15 @@ function App() {
         <Route path="/second-hand-catalog" element={<SecondHandCatalogPage />} />
         <Route path="/requested-catalog" element={<RequestedCatalogPage />} />
         <Route path="/my-listings" element={<MyListings />} />
+        <Route path="/rent/checkout/:id" element={<RentCheckout />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <DesktopChatbox />

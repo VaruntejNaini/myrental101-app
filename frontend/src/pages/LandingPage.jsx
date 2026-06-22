@@ -4,8 +4,10 @@ import { CityStreetScene } from "../components/CityStreetScene";
 import API from "../api"; 
 import { STORAGE_KEYS } from "../constants/auth";
 import PostProductModal from "../components/PostProductModal";
+import { useAddressSync } from "../utils/addressSync";
 import NotificationBell from "../components/NotificationBell";
 import ChatBell from "../components/ChatBell";
+import Footer from "../components/Footer";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
@@ -100,12 +102,17 @@ const getImageUrl = (image) => {
 };
 
 // ── Premium Product Card with Image Slider & Emojis ─────────────────────────
-const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct, currentUser, onDeleteWish }) => {
+const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct, currentUser, onDeleteWish, onOpenInsights }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const [isDeletingWish, setIsDeletingWish] = useState(false);
-  const [showFadeMsg, setShowFadeMsg] = useState(false);
   const cardRef = useRef(null);
   const hasTriggered = useRef(false);
+
+  const isWishOwner = 
+    item.rowType === "Wishlist" && 
+    currentUser && 
+    item.creatorId && 
+    String(item.creatorId) === String(currentUser._id);
 
   useEffect(() => {
     if (item.rowType !== "Wishlist" || hasTriggered.current) return;
@@ -154,8 +161,6 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
     e.stopPropagation();
     if (images.length > 1) {
       setImgIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-    } else {
-      triggerFadeMsg();
     }
   };
 
@@ -163,14 +168,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
     e.stopPropagation();
     if (images.length > 1) {
       setImgIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
-    } else {
-      triggerFadeMsg();
     }
-  };
-
-  const triggerFadeMsg = () => {
-    setShowFadeMsg(true);
-    setTimeout(() => setShowFadeMsg(false), 2000);
   };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -186,38 +184,177 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
     return (R * c).toFixed(1);
   };
 
+  const formatRelativeTime = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const now = new Date();
+    const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "yesterday";
+    return `${diffDays} days ago`;
+  };
+
+  const isOwner = currentUser && item.owner !== "You" && item.rowType !== "Wishlist" 
+    ? (String(item.owner?._id || item.owner) === String(currentUser._id) || isOwnerCard) 
+    : isOwnerCard;
+
+  const isVisuallyLocked = item.isRentedOrReserved && !isOwner && item.rowType !== "Wishlist";
+
+  const renderBadge = () => {
+    if (item.rowType === "Wishlist") {
+      return item.badge ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 w-fit">
+          📢 {item.badge}
+        </span>
+      ) : null;
+    }
+
+    if (isOwner) {
+      if (item.activeNegotiationsCount > 0) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 w-fit">
+            💬 Active Negotiations ({item.activeNegotiationsCount})
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "AWAITING_PAYMENT") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
+            🤝 Negotiation Accepted
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "RESERVED") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
+            📅 Handover Scheduled
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "IN_POSSESSION") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 w-fit">
+            📦 Rented Out
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "RETURN_INITIATED") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 w-fit">
+            🔄 Return in Progress
+          </span>
+        );
+      }
+      if (item.badge === "INACTIVE" || item.status === "INACTIVE") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20 w-fit">
+            ⏸️ Listing Paused
+          </span>
+        );
+      }
+      if (item.badge === "ACTIVE" || item.status === "ACTIVE" || item.status === "AUCTION_ACTIVE") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
+            🟢 Live
+          </span>
+        );
+      }
+    } else {
+      if (item.currentUserTransactionStatus === "IN_POSSESSION") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
+            🔑 Currently Renting
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "RETURN_INITIATED") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 w-fit">
+            🔄 Return Pending
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "AWAITING_PAYMENT") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
+            🎉 Negotiation Accepted
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "PENDING_NEGOTIATION") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 w-fit">
+            💬 Negotiation Active
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus === "NEGOTIATION_DECLINED") {
+        return (
+          <div className="flex flex-col gap-0.5 w-fit">
+            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 w-fit">
+              🔴 Negotiation Declined
+            </span>
+            <span className="text-[9px] text-red-400 font-semibold pl-1">
+              Request declined {formatRelativeTime(item.transactionUpdatedAt)}
+            </span>
+          </div>
+        );
+      }
+      if (isBookmarked) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20 w-fit">
+            🔖 Saved
+          </span>
+        );
+      }
+      if (item.currentUserTransactionStatus !== null && item.currentUserTransactionStatus !== undefined) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20 w-fit">
+            💬 Chat Active
+          </span>
+        );
+      }
+      
+      if (item.isRentedOrReserved) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20 w-fit">
+            🔴 Rented Out
+          </span>
+        );
+      }
+      if (item.badge === "ACTIVE" || item.badge === "Direct Sale" || item.status === "ACTIVE" || item.status === "AUCTION_ACTIVE") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
+            ✨ Available
+          </span>
+        );
+      }
+    }
+    return null;
+  };
+
   return (
     <div 
       ref={cardRef}
-      onClick={() => onCardClick?.(item)}
+      onClick={(e) => {
+        if (!isOwnerCard && !isVisuallyLocked) {
+          onCardClick?.(item);
+        }
+      }}
       className={`flex-shrink-0 w-[280px] sm:w-[320px] group relative rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 overflow-hidden border ${
         isNight ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-800"
-      } hover:-translate-y-2 cursor-pointer`}
+      } ${isOwnerCard ? "" : isVisuallyLocked ? "cursor-not-allowed opacity-75 grayscale contrast-75" : "hover:-translate-y-2 cursor-pointer"}`}
     >
-      {/* Category/Status Badge */}
-      {isOwnerCard ? (
-        <div className={`absolute top-3 left-3 z-10 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-          item.badge === "INACTIVE" ? "bg-red-500" : "bg-emerald-500"
-        }`}>
-          {item.badge}
-        </div>
-      ) : (
-        item.badge && (
-          <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-            {item.badge}
-          </div>
-        )
-      )}
-
       {isOwnerCard && item.productType && (
         <div className="absolute top-3 right-3 z-10 text-white text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-slate-900/80 border border-slate-700/50">
           {item.productType === "SECOND_HAND" ? "FOR SALE" : "FOR RENT"}
         </div>
       )}
 
-      {/* Bookmark or Delete Button */}
       {!isOwnerCard && (
-        item.rowType === "Wishlist" && currentUser && (item.creatorId === currentUser._id || item.creatorId === currentUser) ? (
+        isWishOwner ? (
           <button 
             disabled={isDeletingWish}
             onClick={async (e) => {
@@ -277,37 +414,38 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         )}
 
         {/* Carousel controls - Custom Heroicons with no background circle */}
-        <button 
-          onClick={handlePrev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer"
-          title="Previous Image"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6 filter drop-shadow">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 15.75L3 12m0 0l3.75-3.75M3 12h18" />
-          </svg>
-        </button>
+        {item.rowType !== "Wishlist" && images.length > 1 && (
+          <>
+            <button 
+              onClick={handlePrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer bg-slate-900/40 p-1.5 rounded-full hover:bg-slate-900/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200"
+              title="Previous Image"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 filter drop-shadow">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 15.75L3 12m0 0l3.75-3.75M3 12h18" />
+              </svg>
+            </button>
 
-        <button 
-          onClick={handleNext}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer"
-          title="Next Image"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6 filter drop-shadow">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
-          </svg>
-        </button>
+            <button 
+              onClick={handleNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 transition-colors z-20 cursor-pointer bg-slate-900/40 p-1.5 rounded-full hover:bg-slate-900/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200"
+              title="Next Image"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 filter drop-shadow">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+              </svg>
+            </button>
 
-        {/* Fade out fallback message */}
-        {showFadeMsg && (
-          <div className="absolute inset-0 bg-slate-950/80 flex items-center justify-center p-3 text-center transition-all duration-300 z-30">
-            <span className="text-[10px] sm:text-xs font-black uppercase text-white tracking-widest animate-pulse">
-              Owner did not upload the image yet.
-            </span>
-          </div>
+            {/* Position indicator */}
+            <div className="absolute bottom-2 right-2 bg-slate-900/60 text-white text-[9px] font-black px-2 py-0.5 rounded-full z-20 select-none backdrop-blur-sm border border-white/10">
+              {imgIndex + 1} / {images.length}
+            </div>
+          </>
         )}
       </div>
 
       <div className="p-4 flex flex-col gap-1.5">
+        {renderBadge()}
         <h3 className={`font-black text-sm truncate ${isNight ? "text-slate-100" : "text-slate-800"}`}>
           {item.title}
         </h3>
@@ -318,13 +456,13 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         </div>
 
         {item.securityDeposit !== undefined && item.securityDeposit > 0 && (
-          <p className="text-[10px] text-slate-450 font-bold">
+          <p className="text-[10px] text-slate-455 font-bold">
             🛡️ Security Deposit: <span className="text-indigo-400">₹{item.securityDeposit}</span>
           </p>
         )}
 
         <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
-          <span>👤</span> {item.owner}
+          <span>👤</span> {typeof item.owner === "object" ? (item.owner?.name || "Owner") : item.owner}
         </p>
 
         <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
@@ -340,13 +478,24 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
                   e.stopPropagation();
                   onToggleStatus?.(item.id);
                 }}
-                className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-black text-white shadow-md active:scale-95 transition-all cursor-pointer text-center ${
+                className={`flex-grow py-2 px-3 rounded-xl text-[10px] font-black text-white shadow-md active:scale-95 transition-all cursor-pointer text-center ${
                   item.badge === "INACTIVE" 
                     ? "bg-slate-700 hover:bg-slate-650 border border-slate-650" 
                     : "bg-emerald-600 hover:bg-emerald-500 border border-emerald-500"
                 }`}
               >
                 {item.badge === "INACTIVE" ? "🟢 Enable" : "🔴 Disable"}
+              </button>
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenInsights?.(item);
+                }}
+                className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 border border-indigo-500/25 p-2 rounded-xl text-xs font-black active:scale-95 transition-all cursor-pointer flex items-center justify-center aspect-square"
+                title="View Listing Analytics & Insights"
+              >
+                📊
               </button>
               <button 
                 type="button"
@@ -360,6 +509,19 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
                 🗑️
               </button>
             </div>
+          ) : isWishOwner ? (
+            <>
+              <button 
+                type="button" 
+                onClick={(e) => e.stopPropagation()} 
+                className="text-xs text-indigo-400 hover:underline font-bold bg-transparent border-none p-0 cursor-pointer"
+              >
+                📊 Insights
+              </button>
+              <span className="text-xs text-slate-400">
+                views: <strong className="text-indigo-400">{item.views ?? 0}</strong>
+              </span>
+            </>
           ) : (
             <>
               <div className="flex flex-col">
@@ -379,9 +541,18 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
                   </span>
                 )}
               </div>
-              <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
-                {item.rowType === "Second-Hand" ? "Buy Out" : item.rowType === "Wishlist" ? "Offer" : "Rent Flow"}
-              </button>
+              {isVisuallyLocked ? (
+                <button 
+                  disabled 
+                  className="bg-slate-205 dark:bg-slate-800 text-slate-450 dark:text-slate-500 font-bold text-[10px] px-3.5 py-1.5 rounded-xl cursor-not-allowed opacity-60 text-center border dark:border-slate-700/50"
+                >
+                  Temporarily Unavailable
+                </button>
+              ) : (
+                <button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] px-3.5 py-1.5 rounded-xl font-bold hover:shadow-lg active:scale-95 transition-all cursor-pointer">
+                  {item.rowType === "Second-Hand" ? "Buy Out" : item.rowType === "Wishlist" ? "Offer" : "Rent Flow"}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -400,11 +571,33 @@ export default function Dashboard() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
+  const [insightsModalOpen, setInsightsModalOpen] = useState(false);
+  const [insightsProduct, setInsightsProduct] = useState(null);
+  const [insightsData, setInsightsData] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState("");
+
+  const handleOpenInsights = async (product) => {
+    setInsightsProduct(product);
+    setInsightsModalOpen(true);
+    setInsightsLoading(true);
+    setInsightsError("");
+    setInsightsData(null);
+    try {
+      const res = await API.get(`/rent/products/${product.id || product._id}/insights`);
+      setInsightsData(res.data);
+    } catch (err) {
+      console.error("Error loading product insights:", err);
+      setInsightsError(err.response?.data?.msg || "Failed to load insights. Please try again.");
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    const activeToken = localStorage.getItem("token");
+    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (activeToken) {
       API.get("/auth/me")
         .then(res => {
@@ -461,7 +654,7 @@ export default function Dashboard() {
   const [dbWishes, setDbWishes] = useState([]);
 
   const syncMyProducts = () => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (token) {
       API.get("/rent/products/me")
         .then(res => setMyProducts(res.data))
@@ -512,15 +705,8 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => {
-    syncProducts();
-
-    // Fetch wishes
-    API.get("/wishes")
-      .then(res => setDbWishes(res.data))
-      .catch(err => console.error("Error fetching db wishes:", err));
-
-    const token = localStorage.getItem("token");
+  const refreshNavbarAddress = () => {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (token) {
       API.get("/addresses")
         .then(response => {
@@ -545,6 +731,19 @@ export default function Dashboard() {
       setSavedAddress("Add Address");
       localStorage.setItem("saved_delivery_address", "Add Address");
     }
+  };
+
+  useAddressSync(refreshNavbarAddress);
+
+  useEffect(() => {
+    syncProducts();
+
+    // Fetch wishes
+    API.get("/wishes")
+      .then(res => setDbWishes(res.data))
+      .catch(err => console.error("Error fetching db wishes:", err));
+
+    refreshNavbarAddress();
   }, []);
 
   // Notification / Toast popup
@@ -588,36 +787,87 @@ export default function Dashboard() {
 
   // Load Bookmarks on Mount and hook sync updates
   useEffect(() => {
-    const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    setBookmarkedIds(loaded.map(x => x.id));
+    if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+      setBookmarkedIds(loaded.map(x => x.id));
+      // Sync with backend bookmarks
+      API.get("/rent/products/bookmarks/ids")
+        .then(res => {
+          if (res.data && Array.isArray(res.data)) {
+            setBookmarkedIds(res.data);
+            const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+            const synced = existing.filter(x => res.data.includes(x.id));
+            localStorage.setItem("bookmarked_items", JSON.stringify(synced));
+          }
+        })
+        .catch(err => console.error("Error fetching bookmarks from db:", err));
+    } else {
+      setBookmarkedIds([]);
+    }
   }, []);
 
-  const handleBookmarkToggle = (item) => {
-    const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    const isBookmarked = bookmarkedIds.includes(item.id || item._id);
-
-    let updated = [];
-    if (isBookmarked) {
-      updated = existing.filter(x => x.id !== (item.id || item._id));
-      triggerToast(`Removed "${item.title}" from saved bookmarks!`);
-    } else {
-      const normalizedItem = {
-        id: item.id || item._id,
-        title: item.title,
-        price: item.price || item.rentalPrice || item.budget,
-        unit: item.unit || "day",
-        owner: typeof item.owner === "object" ? item.owner?.name : (item.owner || "Local Owner"),
-        area: item.area || item.distance || "Local",
-        images: item.images || [],
-        emoji: item.emoji || (item.title?.toLowerCase().includes("camera") ? "📷" : item.title?.toLowerCase().includes("scooter") || item.title?.toLowerCase().includes("activa") ? "🛵" : item.title?.toLowerCase().includes("playstation") || item.title?.toLowerCase().includes("ps5") ? "🎮" : "📦"),
-        rowType: item.rowType || item.badge || "Saved"
-      };
-      updated = [...existing, normalizedItem];
-      triggerToast(`Saved "${item.title}" to bookmarks! 🔖`);
+  const handleBookmarkToggle = async (item) => {
+    const itemId = item.id || item._id;
+    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      alert("Authentication Required: Please log in to bookmark products.");
+      return;
     }
-
-    localStorage.setItem("bookmarked_items", JSON.stringify(updated));
-    setBookmarkedIds(updated.map(x => x.id));
+    
+    try {
+      const res = await API.post(`/rent/products/${itemId}/bookmark`);
+      const isBookmarked = res.data.bookmarked;
+      
+      const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+      let updated = [];
+      
+      if (!isBookmarked) {
+        updated = existing.filter(x => x.id !== itemId);
+        triggerToast(`Removed "${item.title}" from saved bookmarks!`);
+      } else {
+        const normalizedItem = {
+          id: itemId,
+          title: item.title,
+          price: item.price || item.rentalPrice || item.budget,
+          unit: item.unit || "day",
+          owner: typeof item.owner === "object" ? item.owner?.name : (item.owner || "Local Owner"),
+          area: item.area || item.distance || "Local",
+          images: item.images || [],
+          emoji: item.emoji || (item.title?.toLowerCase().includes("camera") ? "📷" : item.title?.toLowerCase().includes("scooter") || item.title?.toLowerCase().includes("activa") ? "🛵" : item.title?.toLowerCase().includes("playstation") || item.title?.toLowerCase().includes("ps5") ? "🎮" : "📦"),
+          rowType: item.rowType || item.badge || "Saved"
+        };
+        updated = [...existing, normalizedItem];
+        triggerToast(`Saved "${item.title}" to bookmarks! 🔖`);
+      }
+      
+      localStorage.setItem("bookmarked_items", JSON.stringify(updated));
+      setBookmarkedIds(updated.map(x => x.id));
+    } catch (err) {
+      console.error("Error toggling bookmark on server:", err);
+      // Fallback
+      const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+      const isCurrentlyBookmarked = bookmarkedIds.includes(itemId);
+      let updated = [];
+      if (isCurrentlyBookmarked) {
+        updated = existing.filter(x => x.id !== itemId);
+        triggerToast(`Removed "${item.title}" from saved bookmarks!`);
+      } else {
+        const normalizedItem = {
+          id: itemId,
+          title: item.title,
+          price: item.price || item.rentalPrice || item.budget,
+          unit: item.unit || "day",
+          owner: typeof item.owner === "object" ? item.owner?.name : (item.owner || "Local Owner"),
+          area: item.area || item.distance || "Local",
+          images: item.images || [],
+          emoji: item.emoji || (item.title?.toLowerCase().includes("camera") ? "📷" : item.title?.toLowerCase().includes("scooter") || item.title?.toLowerCase().includes("activa") ? "🛵" : item.title?.toLowerCase().includes("playstation") || item.title?.toLowerCase().includes("ps5") ? "🎮" : "📦"),
+          rowType: item.rowType || item.badge || "Saved"
+        };
+        updated = [...existing, normalizedItem];
+        triggerToast(`Saved "${item.title}" to bookmarks! 🔖`);
+      }
+      localStorage.setItem("bookmarked_items", JSON.stringify(updated));
+      setBookmarkedIds(updated.map(x => x.id));
+    }
   };
 
   const triggerToast = (msg) => {
@@ -781,6 +1031,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem("bookmarked_items");
     setSidePanelOpen(false);
     setMyProducts([]);
     triggerToast("Logged out successfully. Authentication wiped!");
@@ -949,6 +1200,16 @@ export default function Dashboard() {
                       >
                         <span>🔖</span> Saved Items
                       </button>
+                      {currentUser?.role === "ADMIN" && (
+                        <button
+                          onClick={() => { setProfileDropdownOpen(false); navigate("/admin"); }}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-black transition-colors flex items-center gap-2 ${
+                            isNight ? "hover:bg-violet-500/10 text-violet-400" : "hover:bg-violet-50 text-violet-650"
+                          }`}
+                        >
+                          <span>🛡️</span> Admin Panel
+                        </button>
+                      )}
                       <div className={`border-t my-1 ${isNight ? "border-slate-800" : "border-slate-100"}`}></div>
                       <button
                         onClick={() => { setProfileDropdownOpen(false); handleLogout(); }}
@@ -1095,7 +1356,24 @@ export default function Dashboard() {
             {dbProducts.filter(p => p.productType === "RENT" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "📷", owner: item.owner?.name || "Owner", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images, productType: item.productType }} 
+                item={{
+                  id: item._id,
+                  title: item.title,
+                  price: item.rentalPrice,
+                  emoji: "📷",
+                  owner: item.owner,
+                  area: item.area,
+                  badge: item.status,
+                  location: item.location,
+                  securityDeposit: item.securityDeposit,
+                  images: item.images,
+                  productType: item.productType,
+                  currentUserTransactionStatus: item.currentUserTransactionStatus,
+                  transactionUpdatedAt: item.transactionUpdatedAt,
+                  isRentedOrReserved: item.isRentedOrReserved,
+                  activeNegotiationsCount: item.activeNegotiationsCount,
+                  status: item.status
+                }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1103,6 +1381,7 @@ export default function Dashboard() {
                 userCoords={userCoords}
                 coordsLoading={coordsLoading}
                 coordsError={coordsError}
+                currentUser={currentUser}
               />
             ))}
           </div>
@@ -1122,7 +1401,24 @@ export default function Dashboard() {
             {myProducts.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "💻", owner: "You", area: item.area, badge: item.status, location: item.location, securityDeposit: item.securityDeposit, images: item.images, productType: item.productType }} 
+                item={{
+                  id: item._id,
+                  title: item.title,
+                  price: item.rentalPrice,
+                  emoji: "💻",
+                  owner: "You",
+                  area: item.area,
+                  badge: item.status,
+                  location: item.location,
+                  securityDeposit: item.securityDeposit,
+                  images: item.images,
+                  productType: item.productType,
+                  currentUserTransactionStatus: item.currentUserTransactionStatus,
+                  transactionUpdatedAt: item.transactionUpdatedAt,
+                  isRentedOrReserved: item.isRentedOrReserved,
+                  activeNegotiationsCount: item.activeNegotiationsCount,
+                  status: item.status
+                }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1133,6 +1429,8 @@ export default function Dashboard() {
                 isOwnerCard={true}
                 onToggleStatus={handleToggleStatus}
                 onDeleteProduct={handleDeleteProduct}
+                onOpenInsights={handleOpenInsights}
+                currentUser={currentUser}
               />
             ))}
             
@@ -1175,7 +1473,26 @@ export default function Dashboard() {
             {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.rentalPrice, emoji: "🚁", owner: item.owner?.name || "Owner", area: item.area, badge: "Direct Sale", location: item.location, securityDeposit: item.securityDeposit, images: item.images, rowType: "Second-Hand", unit: "flat", productType: item.productType }} 
+                item={{
+                  id: item._id,
+                  title: item.title,
+                  price: item.rentalPrice,
+                  emoji: "🚁",
+                  owner: item.owner,
+                  area: item.area,
+                  badge: "Direct Sale",
+                  location: item.location,
+                  securityDeposit: item.securityDeposit,
+                  images: item.images,
+                  rowType: "Second-Hand",
+                  unit: "flat",
+                  productType: item.productType,
+                  currentUserTransactionStatus: item.currentUserTransactionStatus,
+                  transactionUpdatedAt: item.transactionUpdatedAt,
+                  isRentedOrReserved: item.isRentedOrReserved,
+                  activeNegotiationsCount: item.activeNegotiationsCount,
+                  status: item.status
+                }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1183,6 +1500,7 @@ export default function Dashboard() {
                 userCoords={userCoords}
                 coordsLoading={coordsLoading}
                 coordsError={coordsError}
+                currentUser={currentUser}
               />
             ))}
             {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).length === 0 && (
@@ -1205,7 +1523,7 @@ export default function Dashboard() {
             {dbWishes.map((item) => (
               <ProductCard 
                 key={item._id} 
-                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", creatorId: item.creator?._id || item.creator, owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0, rowType: "Wishlist" }} 
+                item={{ id: item._id, title: item.title, price: item.budget, emoji: "⛺", creatorId: item.creator?._id || item.creator, owner: item.creator?.name || "Borrower", area: "Local", badge: "Wishlist", location: null, securityDeposit: 0, rowType: "Wishlist", views: item.views || 0 }} 
                 isNight={isNight} 
                 isBookmarked={bookmarkedIds.includes(item._id)}
                 onBookmarkToggle={() => handleBookmarkToggle({ id: item._id, ...item })}
@@ -1387,6 +1705,324 @@ export default function Dashboard() {
           {chatOpen ? "✕" : "🤖"}
         </button>
 
+        {/* Product Insights Modal */}
+        {insightsModalOpen && insightsProduct && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+            <div className={`relative w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden border transition-all duration-300 ${
+              isNight ? "bg-slate-900/90 border-slate-800 text-white" : "bg-white/95 border-indigo-50 text-slate-800"
+            }`}>
+              
+              {/* Header banner glow */}
+              <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-violet-600/20 blur-[100px] pointer-events-none"></div>
+              <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-indigo-600/20 blur-[100px] pointer-events-none"></div>
+
+              {/* Modal Header */}
+              <div className="relative z-10 flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                    Listing Owner Analytics
+                  </span>
+                  <h2 className="text-xl md:text-2xl font-black mt-2 tracking-tight">
+                    📈 {insightsProduct.title}
+                  </h2>
+                </div>
+                <button 
+                  onClick={() => setInsightsModalOpen(false)}
+                  className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-red-400 transition-colors cursor-pointer text-lg font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="relative z-10 p-6 max-h-[70vh] overflow-y-auto space-y-6 scrollbar-thin">
+                {insightsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                    <div className="w-12 h-12 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider animate-pulse">Aggregating listing analytics...</p>
+                  </div>
+                ) : insightsError ? (
+                  <div className="text-center py-20 space-y-4">
+                    <span className="text-4xl block">⚠️</span>
+                    <p className="text-sm text-red-400 font-bold">{insightsError}</p>
+                    <button 
+                      onClick={() => handleOpenInsights(insightsProduct)}
+                      className="bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl"
+                    >
+                      Retry Fetching
+                    </button>
+                  </div>
+                ) : insightsData ? (
+                  <>
+                    {/* Grid 1: Analytics summary metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Card A: Visibility */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
+                        isNight ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-[10px] font-black uppercase text-slate-450 tracking-wider">Visibility Overview</span>
+                          <span className="text-lg">👀</span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Total Views</span>
+                            <span className="text-lg font-black text-indigo-400">{insightsData.views}</span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Views Today</span>
+                            <span className="text-sm font-bold">{insightsData.viewsToday}</span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Last 7 Days</span>
+                            <span className="text-sm font-bold">{insightsData.viewsLast7Days}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card B: Interest */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
+                        isNight ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-[10px] font-black uppercase text-slate-455 tracking-wider">Interest Metrics</span>
+                          <span className="text-lg">💖</span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Total Saves (Bookmarks)</span>
+                            <span className="text-lg font-black text-violet-400">{insightsData.totalSaves}</span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Active Negotiations</span>
+                            <span className="text-sm font-bold text-amber-505">{insightsData.pendingNegotiations}</span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Total Requests Received</span>
+                            <span className="text-sm font-bold">{insightsData.totalNegotiationRequests}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card C: Performance */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
+                        isNight ? "bg-slate-955/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-[10px] font-black uppercase text-slate-455 tracking-wider">Negotiation Performance</span>
+                          <span className="text-lg">🤝</span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Acceptance Rate</span>
+                            <span className="text-lg font-black text-emerald-400">{insightsData.acceptanceRate}%</span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Accepted / Rejected</span>
+                            <span className="text-xs font-bold text-emerald-500">
+                              {insightsData.acceptedNegotiations} <span className="text-slate-500">/</span> <span className="text-red-400">{insightsData.rejectedNegotiations}</span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-400">Pending Decisions</span>
+                            <span className="text-xs font-bold text-indigo-400">{insightsData.pendingNegotiations}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Grid 2: Micro-Auction Eligibility & Price Health */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Micro-Auction Tracker */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between relative overflow-hidden ${
+                        isNight ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div>
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <span className="text-[10px] font-black uppercase text-slate-455 tracking-wider">Micro-Auction Eligibility</span>
+                              <h3 className="text-base font-black mt-1">🔥 Surge Auction Tracker</h3>
+                            </div>
+                            {insightsData.auctionEligible || insightsData.status === "AUCTION_ACTIVE" ? (
+                              <span className="text-[10px] font-black uppercase bg-orange-500/10 text-orange-500 border border-orange-500/25 px-2 py-0.5 rounded animate-pulse">
+                                ELIGIBLE
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black uppercase bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded">
+                                INELIGIBLE
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                            If your product receives 5 negotiation or buyout requests in any 2-hour window, it automatically escalates to a Surge Auction with active buyer competition.
+                          </p>
+                        </div>
+                        
+                        <div className="space-y-2 mt-auto">
+                          <div className="flex justify-between items-end text-xs">
+                            <span className="text-slate-400 font-semibold">Activity in last 2 hours</span>
+                            <span className="font-extrabold text-indigo-400">
+                              {insightsData.requestsLast2Hours} <span className="text-slate-500">/</span> {insightsData.auctionThreshold} Requests
+                            </span>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden relative">
+                            <div 
+                              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-1000 shadow-[0_0_12px_rgba(99,102,241,0.5)]" 
+                              style={{ width: `${insightsData.auctionProgressPercentage}%` }}
+                            />
+                          </div>
+                          
+                          <p className="text-[10px] text-slate-455 font-bold italic mt-2">
+                            {insightsData.status === "AUCTION_ACTIVE" 
+                              ? "🎉 Escalation complete! Listing is currently in an active micro-auction."
+                              : insightsData.auctionEligible
+                                ? "⚡ Ready for auction! Next offer will trigger escalation."
+                                : `${insightsData.auctionThreshold - insightsData.requestsLast2Hours} more requests in the next 2 hours to trigger auto-escalation.`
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Price Health & Demand Rating */}
+                      <div className="flex flex-col gap-4">
+                        {/* Price Health */}
+                        <div className={`p-4 rounded-2xl border flex items-center gap-4 ${
+                          isNight ? "bg-slate-955/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                        }`}>
+                          <div className="text-3xl">🛡️</div>
+                          <div className="flex-1">
+                            <span className="text-[9px] font-black uppercase text-slate-455 tracking-wider">Price Health</span>
+                            <h4 className="text-sm font-black mt-0.5">₹{insightsProduct.price}/day</h4>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Category average: <strong className="text-slate-350">₹{insightsData.averageCategoryPrice}/day</strong>.
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block text-[10px] font-black uppercase px-3 py-1 rounded-full border ${
+                              insightsData.priceHealthLabel === "UNDER_MARKET"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                : insightsData.priceHealthLabel === "ABOVE_MARKET"
+                                  ? "bg-amber-500/10 text-amber-500 border-amber-500/25"
+                                  : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
+                            }`}>
+                              {insightsData.priceHealthLabel.replace("_", " ")}
+                            </span>
+                            <span className="block text-[9px] text-slate-455 font-bold mt-1">
+                              {insightsData.ownerPriceDifferencePercentage < 0 
+                                ? `${Math.abs(insightsData.ownerPriceDifferencePercentage)}% Under Average`
+                                : `${insightsData.ownerPriceDifferencePercentage}% Over Average`
+                              }
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Demand Rating */}
+                        <div className={`p-4 rounded-2xl border flex items-center gap-4 ${
+                          isNight ? "bg-slate-955/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                        }`}>
+                          <div className="text-3xl">⚡</div>
+                          <div className="flex-1">
+                            <span className="text-[9px] font-black uppercase text-slate-455 tracking-wider">Demand Rating</span>
+                            <h4 className="text-sm font-black mt-0.5">Index Score: {insightsData.demandIndex} / 100</h4>
+                            <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 mt-1.5 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-1000 ${
+                                  insightsData.demandLabel === "HOT"
+                                    ? "bg-gradient-to-r from-orange-500 to-red-500"
+                                    : insightsData.demandLabel === "HIGH"
+                                      ? "bg-violet-500"
+                                      : insightsData.demandLabel === "GOOD"
+                                        ? "bg-indigo-500"
+                                        : insightsData.demandLabel === "MODERATE"
+                                          ? "bg-sky-500"
+                                          : "bg-slate-400"
+                                }`}
+                                style={{ width: `${insightsData.demandIndex}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block text-[11px] font-black px-3 py-1 rounded-full text-white ${
+                              insightsData.demandLabel === "HOT"
+                                ? "bg-red-500"
+                                : insightsData.demandLabel === "HIGH"
+                                  ? "bg-violet-500"
+                                  : insightsData.demandLabel === "GOOD"
+                                    ? "bg-indigo-500"
+                                    : insightsData.demandLabel === "MODERATE"
+                                      ? "bg-sky-500"
+                                      : "bg-slate-500"
+                            }`}>
+                              {insightsData.demandLabel}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 7-day Traffic Trend Bar Chart */}
+                    <div className={`p-5 rounded-2xl border ${
+                      isNight ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-100"
+                    }`}>
+                      <span className="text-[10px] font-black uppercase text-slate-455 tracking-wider block mb-4">Traffic Trend (Last 7 Days)</span>
+                      
+                      {/* SVG/CSS based bar chart */}
+                      <div className="h-44 flex items-end justify-between gap-3 pt-6 border-b border-slate-200 dark:border-slate-800">
+                        {(() => {
+                          const maxCount = Math.max(1, ...insightsData.dailyViews.map(v => v.count));
+                          return insightsData.dailyViews.map((v, i) => {
+                            // Height as percentage of maximum view day
+                            const heightPct = Math.max(4, (v.count / maxCount) * 80);
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center group relative cursor-help">
+                                {/* Hover tooltip */}
+                                <div className="absolute -top-8 bg-slate-950 text-white text-[9px] font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none border border-slate-800 shadow-md">
+                                  {v.count} view{v.count !== 1 ? 's' : ''}
+                                </div>
+                                {/* Bar */}
+                                <div 
+                                  className="w-full rounded-t-lg bg-gradient-to-t from-indigo-600 to-violet-500 group-hover:from-indigo-400 group-hover:to-violet-400 transition-all duration-500 shadow-lg"
+                                  style={{ height: `${heightPct}%` }}
+                                />
+                                <div className="w-full text-center text-[10px] text-slate-400 font-bold mt-2 truncate">
+                                  {v.day}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="relative z-10 p-5 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+                <button 
+                  onClick={() => setInsightsModalOpen(false)}
+                  className="py-2.5 px-5 rounded-xl text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Close Insights
+                </button>
+                <button 
+                  onClick={() => {
+                    triggerToast("Visibility boost activated! Views will increase naturally. 🚀");
+                    setInsightsModalOpen(false);
+                  }}
+                  disabled={insightsLoading || insightsError || !insightsData}
+                  className="py-2.5 px-6 rounded-xl text-xs font-black text-white bg-gradient-to-r from-indigo-500 to-violet-500 hover:shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Boost Listing Visibility
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
         {/* Post Product Modal */}
         <PostProductModal
           isOpen={postModalOpen}
@@ -1398,6 +2034,7 @@ export default function Dashboard() {
           }}
         />
       </div>
+      <Footer />
     </div>
   );
 }

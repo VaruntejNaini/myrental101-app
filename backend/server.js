@@ -6,13 +6,17 @@ import rateLimit from "express-rate-limit";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
 import wishesRoutes from "./routes/wishes.js";
-import Product from "./models/Product.js";
-import Wish from "./models/Wish.js";
 import Notification from "./models/Notification.js";
 import Transaction from "./models/Transaction.js";
 
 import authRoutes from "./routes/auth.js";
 import addressRoutes from "./routes/addresses.js";
+import adminRoutes from "./routes/admin.js";
+import auctionRoutes from "./controllers/auctionController.js";
+import { initAuctionSockets } from "./sockets/auctionSockets.js";
+//import { initAuctionScheduler } from "./services/auctionSchedulerService.js";
+//import { initNotificationQueue } from "./services/notificationQueueService.js";
+import http from "http";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -79,6 +83,8 @@ app.use("/api/addresses", addressRoutes);
 
 app.use("/api/rent", rentRoutes);
 app.use("/api/wishes", wishesRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/auctions", auctionRoutes);
 
 // Clean up Mock Database listings on startup (deletes mock IDs and preserves user listings)
 const cleanMockDatabase = async () => {
@@ -137,8 +143,11 @@ const migrateOldNotifications = async () => {
 };
 
 mongoose.connection.once("open", async () => {
-  await cleanMockDatabase();
   await migrateOldNotifications();
+
+  // TEMPORARILY DISABLED FOR DEBUGGING
+  // await initAuctionScheduler();
+  // await initNotificationQueue();
 });
 
 
@@ -232,6 +241,10 @@ ${message}
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const io = initAuctionSockets(server);
+app.set('io', io);
+
+server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT} 🚀`);
 });

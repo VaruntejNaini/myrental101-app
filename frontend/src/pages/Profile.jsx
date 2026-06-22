@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -8,9 +9,20 @@ export default function Profile() {
   const [profilePic, setProfilePic] = useState(() => localStorage.getItem("userProfilePic") || "");
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
   const [userEmail, setUserEmail] = useState(() => localStorage.getItem("pendingEmail") || "varun@example.com");
+  const [reputationScore, setReputationScore] = useState(100);
+  const [reputationHistory, setReputationHistory] = useState([]);
+  const [userRole, setUserRole] = useState("USER");
+
+  const getReputationTier = (score) => {
+    if (score >= 1000) return { name: "Trusted Member", emoji: "💎", colorClass: "text-blue-400 bg-blue-500/15 border-blue-500/20" };
+    if (score >= 500) return { name: "Gold Member", emoji: "🥇", colorClass: "text-amber-400 bg-amber-500/15 border-amber-500/20" };
+    if (score >= 250) return { name: "Silver Member", emoji: "🥈", colorClass: "text-slate-350 bg-slate-500/15 border-slate-500/20" };
+    if (score >= 100) return { name: "Bronze Member", emoji: "🥉", colorClass: "text-orange-400 bg-orange-500/15 border-orange-500/20" };
+    return { name: "Newbie", emoji: "🥚", colorClass: "text-indigo-400 bg-indigo-500/15 border-indigo-500/20" };
+  };
 
   useEffect(() => {
-    const activeToken = localStorage.getItem("token");
+    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (activeToken) {
       API.get("/auth/me")
         .then(res => {
@@ -24,6 +36,15 @@ export default function Profile() {
           if (res.data?.profilePic) {
             setProfilePic(res.data.profilePic);
             localStorage.setItem("userProfilePic", res.data.profilePic);
+          }
+          if (res.data?.reputationScore !== undefined) {
+            setReputationScore(res.data.reputationScore);
+          }
+          if (Array.isArray(res.data?.reputationHistory)) {
+            setReputationHistory(res.data.reputationHistory);
+          }
+          if (res.data?.role) {
+            setUserRole(res.data.role);
           }
         })
         .catch(err => console.error("Error loading profile:", err));
@@ -171,25 +192,67 @@ export default function Profile() {
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
                 <h3 className="text-2xl font-black tracking-tight text-indigo-400">{userName}</h3>
                 {/* Flair Status Badge */}
-                <div className="relative group/badge">
-                  <span className="text-xs bg-indigo-500/15 text-indigo-400 font-bold px-2.5 py-1 rounded-lg border border-indigo-500/20 cursor-help transition-all duration-200 hover:bg-indigo-500/25">
-                    Newbie
-                  </span>
-                  <div className="absolute left-1/2 md:left-0 bottom-full mb-2 -translate-x-1/2 md:translate-x-0 hidden group-hover/badge:block w-52 bg-slate-950/95 text-white text-[10px] rounded-xl p-3 shadow-xl leading-relaxed border border-slate-800 z-50">
-                    your badge changes according to your activities.
-                  </div>
-                </div>
+                {(() => {
+                  const tier = getReputationTier(reputationScore);
+                  return (
+                    <div className="relative group/badge">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border cursor-help transition-all duration-200 ${tier.colorClass}`}>
+                        {tier.emoji} {tier.name}
+                      </span>
+                      <div className="absolute left-1/2 md:left-0 bottom-full mb-2 -translate-x-1/2 md:translate-x-0 hidden group-hover/badge:block w-52 bg-slate-950/95 text-white text-[10px] rounded-xl p-3 shadow-xl leading-relaxed border border-slate-800 z-50">
+                        Your badge changes dynamically according to your reputation score.
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <p className="text-sm text-slate-400 font-medium mb-3">Member since May 2026 • Bangalore, KA</p>
               
               {/* Reputation Score Container */}
-              <div className="flex items-center justify-center md:justify-start gap-4">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
                 <div className={`px-4 py-2 rounded-2xl border ${isNight ? "bg-slate-950/40 border-slate-800" : "bg-indigo-50/50 border-indigo-100"}`}>
                   <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block">Reputation Score</span>
-                  <span className="text-lg font-black text-emerald-400">98 / 100 <span className="text-xs text-slate-500 font-normal">(Exceptional)</span></span>
+                  <span className="text-lg font-black text-emerald-400">
+                    {reputationScore} <span className="text-xs text-slate-500 font-normal">points</span>
+                  </span>
                 </div>
+                {userRole === "ADMIN" && (
+                  <button
+                    onClick={() => navigate("/admin")}
+                    className="px-4 py-2 rounded-2xl border border-violet-500/30 bg-violet-500/10 text-violet-400 text-xs font-black hover:bg-violet-500/20 transition-colors"
+                  >
+                    🛡️ Admin Panel
+                  </button>
+                )}
               </div>
             </div>
+          </div>
+
+          {/* Reputation History Timeline */}
+          <div className={`mt-8 p-6 rounded-2xl border ${isNight ? "bg-slate-950/40 border-slate-800" : "bg-indigo-50/30 border-indigo-100"}`}>
+            <h4 className="text-sm font-black uppercase tracking-wider text-slate-400 mb-4">Reputation History</h4>
+            {reputationHistory.length === 0 ? (
+              <p className="text-sm text-slate-500">No reputation events yet. Complete rentals and transactions to earn points.</p>
+            ) : (
+              <div className="space-y-4">
+                {[...reputationHistory].reverse().map((entry, idx) => (
+                  <div key={idx} className="flex items-start gap-4">
+                    <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${entry.points >= 0 ? "bg-emerald-400" : "bg-red-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-300">{entry.action}</span>
+                        <span className={`text-xs font-black ${entry.points >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {entry.points >= 0 ? "+" : ""}{entry.points} pts
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "Unknown date"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Profile Preferences & Settings Area */}

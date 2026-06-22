@@ -15,6 +15,7 @@ const transactionSchema = new mongoose.Schema(
       type: String,
       enum: [
         "PENDING_NEGOTIATION",
+        "NEGOTIATION_DECLINED",
         "AWAITING_PAYMENT",
         "RESERVED",
         "IN_POSSESSION",
@@ -23,9 +24,23 @@ const transactionSchema = new mongoose.Schema(
         "REFUND_PROCESSING",
         "DISPUTED",
         "SETTLED",
+        "RETRACTED",
       ],
       default: "PENDING_NEGOTIATION",
       index: true,
+    },
+    retractedAt: {
+      type: Date,
+      default: null,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
     // Negotiation History
     negotiationHistory: [
@@ -57,6 +72,9 @@ const transactionSchema = new mongoose.Schema(
     disputeReason: { type: String },
     disputeEvidence: { type: String },
     adminDecision: { type: String },
+    adminOutcome: { type: String, enum: ["RELEASE_TO_OWNER", "REFUND_BORROWER", "SPLIT", null], default: null },
+    payoutReleaseRatio: { type: Number, default: null },
+    resolvedByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     decisionTimestamp: { type: Date },
   },
   { timestamps: true }

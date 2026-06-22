@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 // Helper to format relative timestamps cleanly (e.g., "5m ago", "Yesterday")
 const formatRelativeTime = (dateString) => {
@@ -24,8 +25,8 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const currentUserId = localStorage.getItem("token") 
-    ? JSON.parse(atob(localStorage.getItem("token").split(".")[1])).id 
+  const currentUserId = localStorage.getItem(STORAGE_KEYS.TOKEN) 
+    ? JSON.parse(atob(localStorage.getItem(STORAGE_KEYS.TOKEN).split(".")[1])).id 
     : null;
 
   const fetchTransactions = async () => {
@@ -137,10 +138,17 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
                 <div
                   key={tx._id}
                   onClick={() => handleThreadSelect(tx, otherUser)}
-                  className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 flex items-center gap-3.5 ${
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleThreadSelect(tx, otherUser);
+                    }
+                  }}
+                  tabIndex={0}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 flex items-center gap-3.5 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
                     hasUnread
-                      ? "border-indigo-500/80 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-sm"
-                      : "border-gray-200 dark:border-zinc-800 bg-slate-50/40 dark:bg-zinc-850 hover:border-slate-300 dark:hover:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800"
+                      ? "border-indigo-400/80 dark:border-indigo-500/80 bg-indigo-50/60 dark:bg-indigo-950/30 shadow-sm"
+                      : "border-slate-200/85 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-400/80 dark:hover:border-indigo-500/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
                   }`}
                 >
                   {/* User Profile Avatar */}
@@ -160,26 +168,26 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
                       }`}>
                         {otherUser.name}
                       </h4>
-                      <span className="text-[10px] font-black uppercase text-indigo-500 tracking-wider flex-shrink-0">
+                      <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider flex-shrink-0">
                         {tx.product?.productType === "SECOND_HAND" ? "Buyout" : "Rent"}
                       </span>
                     </div>
 
                     {/* Product Name */}
-                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-black truncate mt-0.5">
+                    <p className="text-[11px] text-indigo-650 dark:text-indigo-400 font-black truncate mt-0.5">
                       {tx.product?.title || "Product Item"}
                     </p>
 
                     {/* Latest Message Preview */}
                     <div className="flex justify-between items-center gap-1.5 mt-1">
                       <p className={`text-xs truncate flex-1 ${
-                        hasUnread ? "font-bold text-slate-900 dark:text-zinc-100" : "font-medium text-slate-400 dark:text-zinc-400"
+                        hasUnread ? "font-bold text-slate-900 dark:text-zinc-150" : "font-medium text-slate-550 dark:text-zinc-400"
                       }`}>
                         {previewText}
                       </p>
                       
                       {/* Message Timestamp */}
-                      <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-bold flex-shrink-0">
+                      <span className="text-[10px] text-slate-500 dark:text-zinc-450 font-bold flex-shrink-0">
                         {formatRelativeTime(lastMsgTime)}
                       </span>
                     </div>
@@ -187,7 +195,7 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
 
                   {/* Thread Unread Count Badge */}
                   {hasUnread && (
-                    <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-[10px] font-black text-white shadow ring-1 ring-white dark:ring-zinc-900 animate-pulse">
+                    <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-[10px] font-black text-white shadow ring-1 ring-white dark:ring-zinc-900">
                       {tx.unreadCount}
                     </div>
                   )}

@@ -2,18 +2,38 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import { verifyToken } from "../middleware/auth.js";
+import { verifyToken, requireAdmin } from "../middleware/auth.js";
+import { adminLimiter } from "../middleware/adminLimiter.js";
+import { resolveDispute } from "../controllers/adminController.js";
 import Product from "../models/Product.js";
 import Transaction from "../models/Transaction.js";
 import Auction from "../models/Auction.js";
 import Notification from "../models/Notification.js";
 import Message from "../models/Message.js";
 import Review from "../models/Review.js";
+import User from "../models/User.js";
+import { awardReputation } from "../services/reputationService.js";
+import Bookmark from "../models/Bookmark.js";
 
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
 
 const router = express.Router();
+
+const isOwner = (transaction, userId) => transaction.owner?.toString() === userId;
+const isBorrower = (transaction, userId) => transaction.borrower?.toString() === userId;
+const isParticipant = (transaction, userId) => isOwner(transaction, userId) || isBorrower(transaction, userId);
+
+const getImageUrl = (image) => {
+  if (!image) return "";
+  if (typeof image === "string") return image;
+  return image.url || "";
+};
+
+const getImagePublicId = (image) => {
+  if (!image || typeof image === "string") return null;
+  return image.publicId || image.public_id || null;
+};
 
 // --- STATE MACHINE VALIDATION DEFINITIONS ---
 const VALID_TRANSITIONS = {
@@ -47,6 +67,8 @@ async function createNotification(userId, type, title, message, senderId = null,
       newType = "NEGOTIATION";
     } else if (["RETURN_INITIATED", "DISPUTE_RAISED", "SETTLEMENT_COMPLETED"].includes(type)) {
       newType = "ORDER";
+    } else if (type === "OFFER_RETRACTED") {
+      newType = "OFFER_RETRACTED";
     }
     
     const notif = new Notification({
@@ -67,38 +89,227 @@ async function createNotification(userId, type, title, message, senderId = null,
 // 1. PRODUCTS CATALOUGE LISTINGS
 // ==========================================
 
+// Escape regex special characters utility
+const escapeRegex = (string) => {
+  return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+};
+
+const resolveProductStatuses = async (productsArray, currentUserId) => {
+  if (!productsArray || productsArray.length === 0) return [];
+
+  const productIds = productsArray.map(p => p._id);
+  
+  const allMatchedTransactions = await Transaction.find({
+    product: { $in: productIds },
+    $or: [
+      ...(currentUserId ? [{ borrower: currentUserId }, { owner: currentUserId }] : []),
+      { status: { $in: ["RESERVED", "IN_POSSESSION", "RETURN_INITIATED", "DAMAGE_REVIEW", "REFUND_PROCESSING", "DISPUTED"] } }
+    ]
+  }).sort({ updatedAt: -1 });
+
+  const userTxMap = {};
+  const globalActiveTxMap = {};
+  const pendingCountMap = {};
+
+  allMatchedTransactions.forEach(tx => {
+    const pId = tx.product.toString();
+    
+    if (currentUserId && (tx.borrower.toString() === currentUserId || tx.owner.toString() === currentUserId)) {
+      if (!userTxMap[pId]) {
+        userTxMap[pId] = tx;
+      }
+    }
+    
+    if (["RESERVED", "IN_POSSESSION", "RETURN_INITIATED", "DAMAGE_REVIEW", "REFUND_PROCESSING", "DISPUTED"].includes(tx.status)) {
+      if (!globalActiveTxMap[pId]) {
+        globalActiveTxMap[pId] = tx;
+      }
+    }
+
+    if (tx.status === "PENDING_NEGOTIATION") {
+      pendingCountMap[pId] = (pendingCountMap[pId] || 0) + 1;
+    }
+  });
+
+  return productsArray.map(p => {
+    const plain = p.toObject();
+    const userTx = userTxMap[plain._id.toString()];
+    const globalTx = globalActiveTxMap[plain._id.toString()];
+    
+    plain.currentUserTransactionStatus = userTx ? userTx.status : null;
+    plain.transactionUpdatedAt = userTx ? userTx.updatedAt : null;
+    plain.isRentedOrReserved = globalTx ? true : false;
+    plain.activeNegotiationsCount = pendingCountMap[plain._id.toString()] || 0;
+    
+    return plain;
+  });
+};
+
+const ALLOWED_CATEGORIES = ["Electronics", "Vehicles", "Tools", "Outdoor", "Music"];
+const ALLOWED_SORTS = ["price_asc", "price_desc", "newest", "distance_asc"];
+
 // Get All Products (Filtered by Type / Proximity)
 router.get("/products", async (req, res) => {
   try {
-    const { productType, category, minPrice, maxPrice, search } = req.query;
-    let query = { status: { $ne: "INACTIVE" } }; // Hide disabled products from public catalog
-    if (productType) query.productType = productType;
-    if (category && category !== "All") query.category = category;
-    if (minPrice || maxPrice) {
-      query.rentalPrice = {};
-      if (minPrice) query.rentalPrice.$gte = Number(minPrice);
-      if (maxPrice) query.rentalPrice.$lte = Number(maxPrice);
-    }
-    if (search) {
-      query.title = { $regex: search, $options: "i" };
+    const { 
+      productType, 
+      category, 
+      minPrice, 
+      maxPrice, 
+      search, 
+      latitude, 
+      longitude, 
+      maxDistance,
+      sort,
+      page,
+      limit,
+      paginated
+    } = req.query;
+
+    let query = { status: { $ne: "INACTIVE" } };
+
+    // 1. Filter by productType
+    if (productType) {
+      query.productType = productType;
     }
 
-    // Decode token optionally to exclude current user's products
+    // 2. Validate & Filter by category
+    if (category && category !== "All") {
+      if (ALLOWED_CATEGORIES.includes(category)) {
+        query.category = category;
+      }
+    }
+
+    // 3. Validate & Filter by Price Range
+    if (minPrice || maxPrice) {
+      let min = minPrice ? Number(minPrice) : 0;
+      let max = maxPrice ? Number(maxPrice) : Infinity;
+
+      if (isNaN(min) || min < 0) min = 0;
+      if (isNaN(max) || max < 0) max = Infinity;
+
+      if (min > max) {
+        const temp = min;
+        min = max;
+        max = temp;
+      }
+
+      query.rentalPrice = { $gte: min };
+      if (max !== Infinity) {
+        query.rentalPrice.$lte = max;
+      }
+    }
+
+    // 4. Escape & Filter by Search keyword
+    if (search) {
+      const trimmedSearch = search.trim();
+      if (trimmedSearch) {
+        const escapedSearch = escapeRegex(trimmedSearch);
+        query.$or = [
+          { title: { $regex: escapedSearch, $options: "i" } },
+          { description: { $regex: escapedSearch, $options: "i" } }
+        ];
+      }
+    }
+
+    // 5. Validate & Filter by Distance (Geospatial)
+    const latNum = Number(latitude);
+    const lngNum = Number(longitude);
+    const distNum = Number(maxDistance);
+
+    const hasLocation = !isNaN(latNum) && !isNaN(lngNum) && !isNaN(distNum);
+
+    if (hasLocation) {
+      if (sort === "distance_asc") {
+        query.location = {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [lngNum, latNum]
+            },
+            $maxDistance: distNum * 1000
+          }
+        };
+      } else {
+        const radiusInRadians = distNum / 6378.1;
+        query.location = {
+          $geoWithin: {
+            $centerSphere: [[lngNum, latNum], radiusInRadians]
+          }
+        };
+      }
+    }
+
+    // 6. Decode token optionally to exclude current user's own products
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
+    let currentUserId = null;
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         if (decoded && decoded.id) {
           query.owner = { $ne: decoded.id };
+          currentUserId = decoded.id;
         }
       } catch (err) {
-        // Invalid or expired token; ignore filtering by owner
+        // Ignore token decode errors
       }
     }
 
-    const products = await Product.find(query).populate("owner", "name email");
-    res.json(products);
+    // 7. Sort Options
+    let sortOption = { createdAt: -1 };
+    let validatedSort = sort;
+    if (sort && !ALLOWED_SORTS.includes(sort)) {
+      validatedSort = "newest";
+    }
+
+    if (validatedSort === "price_asc") {
+      sortOption = { rentalPrice: 1 };
+    } else if (validatedSort === "price_desc") {
+      sortOption = { rentalPrice: -1 };
+    } else if (validatedSort === "newest") {
+      sortOption = { createdAt: -1 };
+    } else if (validatedSort === "distance_asc" && hasLocation) {
+      sortOption = null;
+    }
+
+    // 8. Pagination & Response Formatting
+    if (paginated === "true") {
+      const pageNum = Number(page) || 1;
+      const limitNum = Number(limit) || 12;
+      const total = await Product.countDocuments(query);
+      
+      const totalPages = Math.ceil(total / limitNum) || 1;
+      const validatedPage = Math.min(Math.max(1, pageNum), totalPages);
+      const skip = (validatedPage - 1) * limitNum;
+
+      let mongooseQuery = Product.find(query);
+      if (sortOption) {
+        mongooseQuery = mongooseQuery.sort(sortOption);
+      }
+
+      const products = await mongooseQuery
+        .skip(skip)
+        .limit(limitNum)
+        .populate("owner", "name email");
+
+      const resolvedProducts = await resolveProductStatuses(products, currentUserId);
+
+      res.json({
+        products: resolvedProducts,
+        totalPages,
+        currentPage: validatedPage,
+        totalCount: total
+      });
+    } else {
+      let mongooseQuery = Product.find(query);
+      if (sortOption) {
+        mongooseQuery = mongooseQuery.sort(sortOption);
+      }
+      const products = await mongooseQuery.populate("owner", "name email");
+      const resolvedProducts = await resolveProductStatuses(products, currentUserId);
+      res.json(resolvedProducts);
+    }
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -108,7 +319,8 @@ router.get("/products", async (req, res) => {
 router.get("/products/me", verifyToken, async (req, res) => {
   try {
     const products = await Product.find({ owner: req.userId }).populate("owner", "name email");
-    res.json(products);
+    const resolvedProducts = await resolveProductStatuses(products, req.userId);
+    res.json(resolvedProducts);
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -146,35 +358,74 @@ router.get("/products/:id", async (req, res) => {
       return res.status(404).json({ msg: "Product not found" });
     }
 
-    const product = await Product.findById(req.params.id).populate("owner", "name email");
+    const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ msg: "Product not found" });
+
+    // Try to extract requesterId
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    let requesterId = null;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        requesterId = decoded.id;
+      } catch (err) {
+        // Token is invalid/expired
+      }
+    }
+
+    const isOwner = requesterId && product.owner.toString() === requesterId;
 
     // Enforce ownership checks for INACTIVE listings
     if (product.status === "INACTIVE") {
-      const authHeader = req.headers["authorization"];
-      const token = authHeader && authHeader.split(" ")[1];
-      let requesterId = null;
-
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          requesterId = decoded.id;
-        } catch (err) {
-          // Token is invalid/expired, leave requesterId as null
-        }
-      }
-
-      if (!requesterId || product.owner._id.toString() !== requesterId) {
+      if (!isOwner) {
         return res.status(403).json({ msg: "Access denied: This listing has been deactivated by the owner." });
       }
     }
-    
+
+    // Increment views if viewer is not the owner
+    if (!isOwner) {
+      if (!product.analytics) {
+        product.analytics = { dailyViews: [] };
+      }
+      if (!product.analytics.dailyViews) {
+        product.analytics.dailyViews = [];
+      }
+
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      let dailyBucket = product.analytics.dailyViews.find(bucket => {
+        const bucketDate = new Date(bucket.date);
+        bucketDate.setUTCHours(0, 0, 0, 0);
+        return bucketDate.getTime() === today.getTime();
+      });
+
+      if (dailyBucket) {
+        dailyBucket.count += 1;
+      } else {
+        product.analytics.dailyViews.push({ date: today, count: 1 });
+      }
+
+      // Limit array size to last 10 elements to prevent infinite document bloat
+      if (product.analytics.dailyViews.length > 10) {
+        product.analytics.dailyViews.shift();
+      }
+
+      product.views = (product.views || 0) + 1;
+      await product.save();
+    }
+
+    // Populate owner info before returning response
+    const populatedProduct = await Product.findById(product._id).populate("owner", "name email");
+
     // Attach current active auction context if applicable
     let auction = null;
-    if (product.status === "AUCTION_ACTIVE") {
-      auction = await Auction.findOne({ product: product._id, isResolved: false });
+    if (populatedProduct.status === "AUCTION_ACTIVE") {
+      auction = await Auction.findOne({ product: populatedProduct._id, isResolved: false });
     }
-    res.json({ product, auction });
+    res.json({ product: populatedProduct, auction });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -182,11 +433,6 @@ router.get("/products/:id", async (req, res) => {
 
 // Add Product Listing
 router.post("/products", verifyToken, upload.array("productImages", 5), async (req, res) => {
-  console.log("ROUTE TRIGGERED: POST /products");
-  console.log("HEADERS:", req.headers);
-  console.log("BODY:", req.body);
-  console.log("FILES:", req.files);
-
   // 1. Environment Pre-Validation Safeguard
   if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === "ROOT") {
     return res.status(400).json({ msg: "Backend storage configuration error: Invalid or unconfigured Cloudinary Cloud Name." });
@@ -197,14 +443,14 @@ router.post("/products", verifyToken, upload.array("productImages", 5), async (r
     if (!req.body) {
       throw new Error("req.body is undefined. Multipart parsing might have failed.");
     }
-    const { title, description, category, rentalPrice, securityDeposit, city, area, productType } = req.body;
+    const { title, description, category, rentalPrice, securityDeposit, city, area, productType, latitude, longitude } = req.body;
     
     // Process uploaded files if any
     if (req.files && req.files.length > 0) {
       const folder = productType === "RENT" ? "rentit/rent" : "rentit/secondhand";
       for (const file of req.files) {
         const result = await uploadToCloudinary(file.buffer, folder);
-        uploadedAssets.push(result.secure_url);
+        uploadedAssets.push({ url: result.secure_url, publicId: result.public_id });
       }
     }
 
@@ -212,7 +458,7 @@ router.post("/products", verifyToken, upload.array("productImages", 5), async (r
     const sanitizedRentalPrice = rentalPrice && rentalPrice.trim() !== "" ? Number(rentalPrice) : 0;
     const sanitizedSecurityDeposit = securityDeposit && securityDeposit.trim() !== "" ? Number(securityDeposit) : 0;
 
-    const product = await Product.create({
+    const productData = {
       title,
       description,
       category,
@@ -223,16 +469,36 @@ router.post("/products", verifyToken, upload.array("productImages", 5), async (r
       area,
       productType,
       owner: req.userId,
-    });
+    };
+
+    if (
+      latitude !== undefined && 
+      longitude !== undefined && 
+      latitude !== null && 
+      longitude !== null && 
+      String(latitude).trim() !== "" && 
+      String(longitude).trim() !== ""
+    ) {
+      productData.location = {
+        type: "Point",
+        coordinates: [Number(longitude), Number(latitude)]
+      };
+    }
+
+    const product = await Product.create(productData);
+
+    // Award +5 Reputation points to the owner
+    await awardReputation(req.userId, 5, "PRODUCT_CREATED");
     
     res.status(201).json(product);
   } catch (err) {
     console.error("CRITICAL ERROR IN POST /products:", err);
     // Rollback uploaded Cloudinary assets on failure to prevent orphan storage leaks
     for (const asset of uploadedAssets) {
-      if (asset.publicId) {
-        await cloudinary.uploader.destroy(asset.publicId).catch(rollbackErr => {
-          console.error(`Rollback error destroying asset ${asset.publicId}:`, rollbackErr);
+      const publicId = getImagePublicId(asset);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId).catch(rollbackErr => {
+          console.error(`Rollback error destroying asset ${publicId}:`, rollbackErr);
         });
       }
     }
@@ -257,19 +523,78 @@ router.delete("/products/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ msg: "Unauthorized: You do not own this listing." });
     }
 
+    // Find active transactions for this product
+    const activeTransactions = await Transaction.find({
+      product: req.params.id,
+      status: {
+        $in: [
+          "PENDING_NEGOTIATION",
+          "AWAITING_PAYMENT",
+          "RESERVED",
+          "NEGOTIATING",
+          "ACCEPTED"
+        ]
+      }
+    });
+
+    // Notify affected borrowers
+    const ownerUser = await User.findById(req.userId);
+    const ownerName = ownerUser?.name || "The owner";
+    for (const transaction of activeTransactions) {
+      // Notification deduplication check
+      const existingNotif = await Notification.findOne({
+        recipient: transaction.borrower,
+        transactionId: transaction._id,
+        type: "OFFER_RETRACTED"
+      });
+
+      if (!existingNotif) {
+        await createNotification(
+          transaction.borrower,
+          "OFFER_RETRACTED",
+          "Offer Retracted",
+          `${ownerName} has withdrawn the product "${product.title}".\n\nThe product is no longer available for rent, sale, negotiation, checkout, reservation, or any other service.`,
+          req.userId,
+          "",
+          transaction._id
+        );
+      }
+    }
+
+    // Mark active transactions as retracted instead of deleting them
+    await Transaction.updateMany(
+      {
+        product: req.params.id,
+        status: {
+          $in: [
+            "PENDING_NEGOTIATION",
+            "AWAITING_PAYMENT",
+            "RESERVED",
+            "NEGOTIATING",
+            "ACCEPTED"
+          ]
+        }
+      },
+      {
+        status: "RETRACTED",
+        retractedAt: new Date()
+      }
+    );
+
     // Cleanup Cloudinary assets
     if (product.images && product.images.length > 0) {
       for (const img of product.images) {
-        if (img && img.publicId) {
-          await cloudinary.uploader.destroy(img.publicId).catch(err => {
-            console.error(`Failed to delete Cloudinary asset ${img.publicId}:`, err);
+        const publicId = getImagePublicId(img);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId).catch(err => {
+            console.error(`Failed to delete Cloudinary asset ${publicId}:`, err);
           });
         }
       }
     }
 
     await Product.findByIdAndDelete(req.params.id);
-    res.json({ msg: "Product listing deleted cleanly." });
+    res.json({ msg: "Product listing deleted cleanly and active negotiations retracted." });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -304,33 +629,50 @@ router.post("/negotiate", verifyToken, async (req, res) => {
     const durationDays = Math.ceil(Math.abs(new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1;
     const totalPaid = (dailyRate * durationDays) + securityDeposit;
 
-    // Check if an existing negotiation exists for this user/product
-    let transaction = await Transaction.findOne({
+    // Check if an active negotiation already exists
+    const existingNegotiation = await Transaction.findOne({
       product: productId,
       borrower: req.userId,
-      status: "PENDING_NEGOTIATION",
+      status: {
+        $in: ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"]
+      }
     }).session(session);
 
-    if (transaction) {
-      transaction.negotiationHistory.push({ offeredBy: req.userId, rate: dailyRate });
-      transaction.dailyRate = dailyRate;
-      transaction.totalPaid = totalPaid;
-      await transaction.save({ session });
-    } else {
-      const createdDocs = await Transaction.create([{
-        product: productId,
-        borrower: req.userId,
-        owner: product.owner,
-        startDate,
-        endDate,
-        dailyRate,
-        securityDeposit,
-        totalPaid,
-        status: "PENDING_NEGOTIATION",
-        negotiationHistory: [{ offeredBy: req.userId, rate: dailyRate }],
-      }], { session });
-      transaction = createdDocs[0];
+    if (existingNegotiation) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({
+        success: false,
+        msg: "You already have an active negotiation for this product."
+      });
     }
+
+    // Prevent owner from negotiating their own listing
+    if (String(product.owner) === String(req.userId)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({
+        success: false,
+        msg: "Owners cannot negotiate their own listings."
+      });
+    }
+
+    const createdDocs = await Transaction.create([{
+      product: productId,
+      borrower: req.userId,
+      owner: product.owner,
+      startDate,
+      endDate,
+      dailyRate,
+      securityDeposit,
+      totalPaid,
+      status: "PENDING_NEGOTIATION",
+      negotiationHistory: [{ offeredBy: req.userId, rate: dailyRate }],
+    }], { session });
+    const transaction = createdDocs[0];
+
+    // Award +3 Reputation points for the first negotiation initiated
+    await awardReputation(req.userId, 3, "NEGOTIATION_INITIATED");
 
     // Trigger Proximity/Surge monitor check
     const recentRequestsCount = await Transaction.countDocuments({
@@ -379,6 +721,15 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.id).populate("product");
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
+    // Validate requester is part of the transaction
+    if (transaction.owner.toString() !== req.userId && transaction.borrower.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Unauthorized: You are not part of this transaction." });
+    }
+
+    if (transaction.status === "NEGOTIATION_DECLINED") {
+      return res.status(400).json({ msg: "Transaction negotiation has been declined and is immutable." });
+    }
+
     if (transaction.status !== "PENDING_NEGOTIATION") {
       return res.status(400).json({ msg: "Transaction not in negotiation state" });
     }
@@ -386,12 +737,15 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
     const isSecondHand = transaction.product?.productType === "SECOND_HAND";
 
     if (action === "ACCEPT") {
+      if (!isOwner(transaction, req.userId)) {
+        return res.status(403).json({ msg: "Only the owner can accept an offer." });
+      }
       // Transition to AWAITING_PAYMENT
       transaction.status = "AWAITING_PAYMENT";
       await transaction.save();
       const notifMsg = isSecondHand
         ? `Your purchase request for ₹${transaction.dailyRate} has been accepted! Please checkout.`
-        : `Your negotiation for ${transaction.dailyRate}/day has been accepted! Please checkout.`;
+        : `Your negotiation for "${transaction.product?.title || 'Product'}" has been accepted! Please checkout.`;
       await createNotification(transaction.borrower, "OFFER_ACCEPTED", "Negotiation Accepted 🎉", notifMsg, req.userId, `/product/${transaction.product._id}?tx=${transaction._id}`, transaction._id);
     } else if (action === "COUNTER") {
       transaction.negotiationHistory.push({ offeredBy: req.userId, rate: counterRate });
@@ -406,12 +760,21 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
         : `New counter price proposal of ₹${counterRate}/day received.`;
       await createNotification(receiver, "NEW_NEGOTIATION_OFFER", "Counter Offer Made", notifMsg, req.userId, `/product/${transaction.product._id}?tx=${transaction._id}`, transaction._id);
     } else {
+      if (!isOwner(transaction, req.userId)) {
+        return res.status(403).json({ msg: "Only the owner can reject an offer." });
+      }
       const notifMsg = isSecondHand
         ? `Your purchase request for ₹${transaction.dailyRate} has been rejected.`
-        : `Your negotiation for ₹${transaction.dailyRate}/day has been rejected.`;
-      await createNotification(transaction.borrower, "OFFER_REJECTED", "Negotiation Rejected ❌", notifMsg, req.userId, "", transaction._id);
-      await Transaction.findByIdAndDelete(transaction._id);
-      return res.json({ msg: "Offer rejected and closed." });
+        : `Your negotiation for "${transaction.product?.title || 'Product'}" has been rejected.`;
+      const redirectUrl = transaction.product ? `/product/${transaction.product._id}?tx=${transaction._id}` : "";
+      await createNotification(transaction.borrower, "OFFER_REJECTED", "Negotiation Rejected ❌", notifMsg, req.userId, redirectUrl, transaction._id);
+      
+      transaction.status = "NEGOTIATION_DECLINED";
+      transaction.resolvedAt = new Date();
+      transaction.resolvedBy = req.userId;
+      await transaction.save();
+      
+      return res.json({ msg: "Offer rejected and closed.", transaction });
     }
 
     res.json(transaction);
@@ -427,6 +790,15 @@ router.post("/checkout/:id", verifyToken, async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (transaction.status === "NEGOTIATION_DECLINED") {
+      return res.status(400).json({ msg: "Transaction is declined and immutable." });
+    }
+
+    // Validate checkout caller is the actual borrower
+    if (transaction.borrower.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Unauthorized: You are not the borrower for this transaction." });
+    }
 
     // Validate transition AWAITING_PAYMENT -> RESERVED
     if (!VALID_TRANSITIONS[transaction.status]?.includes("RESERVED")) {
@@ -444,6 +816,10 @@ router.post("/checkout/:id", verifyToken, async (req, res) => {
     transaction.escrowStatus = "HELD";
     transaction.status = "RESERVED";
     await transaction.save();
+
+    // Award reputation points on successful checkout confirmation
+    await awardReputation(transaction.owner, 10, "TRANSACTION_COMPLETED");
+    await awardReputation(transaction.borrower, 5, "TRANSACTION_COMPLETED");
 
     await createNotification(transaction.owner, "OFFER_ACCEPTED", "Escrow Secured 🔒", `Funds for listing are safely held in escrow. Setup pickup!`, null, "", transaction._id);
 
@@ -463,6 +839,22 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
     const { otpType } = req.body; // 'HANDOFF' or 'RETURN'
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (!isBorrower(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only the borrower can generate rental verification codes." });
+    }
+
+    if (otpType !== "HANDOFF" && otpType !== "RETURN") {
+      return res.status(400).json({ msg: "Invalid OTP type." });
+    }
+
+    if (otpType === "HANDOFF" && transaction.status !== "RESERVED") {
+      return res.status(400).json({ msg: "Handoff OTPs can only be generated for reserved rentals." });
+    }
+
+    if (otpType === "RETURN" && transaction.status !== "RETURN_INITIATED") {
+      return res.status(400).json({ msg: "Return OTPs can only be generated after return is initiated." });
+    }
 
     const rawOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const hash = await bcrypt.hash(rawOtp, 10);
@@ -491,6 +883,10 @@ router.post("/transaction/:id/verify-handoff", verifyToken, async (req, res) => 
     const { otp } = req.body;
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (!isOwner(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only the owner can verify handoff." });
+    }
 
     if (transaction.status !== "RESERVED") {
       return res.status(400).json({ msg: "Transaction not in RESERVED status" });
@@ -525,6 +921,10 @@ router.post("/transaction/:id/initiate-return", verifyToken, async (req, res) =>
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
+    if (!isBorrower(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only the borrower can initiate return." });
+    }
+
     if (transaction.status !== "IN_POSSESSION") {
       return res.status(400).json({ msg: "Only active rentals can be returned" });
     }
@@ -546,6 +946,10 @@ router.post("/transaction/:id/verify-return", verifyToken, async (req, res) => {
     const { otp, reportDamage, damageReport, claimAmount } = req.body;
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (!isOwner(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only the owner can verify returns." });
+    }
 
     if (transaction.status !== "RETURN_INITIATED") {
       return res.status(400).json({ msg: "Return is not initiated for verification" });
@@ -598,8 +1002,20 @@ router.post("/transaction/:id/dispute", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
+    if (!isBorrower(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only the borrower can escalate a damage dispute." });
+    }
+
+    if (transaction.status !== "DAMAGE_REVIEW") {
+      return res.status(400).json({ msg: "Only damage review transactions can be escalated." });
+    }
+
+    if (!disputeReason || disputeReason.trim().length < 5) {
+      return res.status(400).json({ msg: "Please provide a clear dispute reason." });
+    }
+
     transaction.status = "DISPUTED";
-    transaction.disputeReason = disputeReason;
+    transaction.disputeReason = disputeReason.trim();
     transaction.escrowStatus = "HELD_DISPUTED";
     await transaction.save();
 
@@ -609,30 +1025,8 @@ router.post("/transaction/:id/dispute", verifyToken, async (req, res) => {
   }
 });
 
-// Admin Resolve Dispute Audit Route
-router.post("/admin/disputes/:id/resolve", verifyToken, async (req, res) => {
-  try {
-    const { adminDecision, payoutReleaseRatio } = req.body; // e.g. release ratio to owner (0 to 1)
-    const transaction = await Transaction.findById(req.params.id);
-    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
-
-    if (transaction.status !== "DISPUTED" && transaction.status !== "DAMAGE_REVIEW") {
-      return res.status(400).json({ msg: "Transaction is not currently flagged for audit review" });
-    }
-
-    transaction.adminDecision = adminDecision;
-    transaction.decisionTimestamp = new Date();
-    transaction.status = "SETTLED";
-    transaction.escrowStatus = "RELEASED";
-    await transaction.save();
-
-    await Product.findByIdAndUpdate(transaction.product, { status: "ACTIVE" });
-
-    res.json({ success: true, transaction });
-  } catch (err) {
-    res.status(500).json({ msg: err.message });
-  }
-});
+// Deprecated: use POST /api/admin/disputes/:id/resolve instead
+router.post("/admin/disputes/:id/resolve", adminLimiter, verifyToken, requireAdmin, resolveDispute);
 
 // ==========================================
 // 5. USER MESSAGING SERVICES
@@ -690,6 +1084,12 @@ router.get("/chat/:transactionId", verifyToken, async (req, res) => {
 // Mark messages in a transaction thread as read
 router.post("/chat/:transactionId/read", verifyToken, async (req, res) => {
   try {
+    const transaction = await Transaction.findById(req.params.transactionId);
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+    if (!isParticipant(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
     await Message.updateMany(
       { transaction: req.params.transactionId, receiver: req.userId, readStatus: false },
       { readStatus: true }
@@ -725,12 +1125,18 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
       return res.status(400).json({ msg: `Sending messages is not permitted for transaction status: ${transaction.status}` });
     }
 
-    const { receiverId, content } = req.body;
+    const { content } = req.body;
+    const cleanContent = typeof content === "string" ? content.trim() : "";
+    if (!cleanContent || cleanContent.length > 2000) {
+      return res.status(400).json({ msg: "Message content must be between 1 and 2000 characters." });
+    }
+
+    const receiverId = isOwner(transaction, req.userId) ? transaction.borrower : transaction.owner;
     const message = await Message.create({
       transaction: req.params.transactionId,
       sender: req.userId,
       receiver: receiverId,
-      content,
+      content: cleanContent,
     });
     res.json(message);
   } catch (err) {
@@ -816,7 +1222,35 @@ router.put("/notifications/read-all", verifyToken, async (req, res) => {
 // Mark Single Read
 router.put("/notifications/:id/read", verifyToken, async (req, res) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.userId },
+      { isRead: true },
+      { new: true }
+    );
+    if (!notification) {
+      return res.status(404).json({ msg: "Notification not found" });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// Mark all notifications for a specific transaction as read
+router.post("/notifications/transaction/:transactionId/read", verifyToken, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.transactionId);
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    // Validate ownership/involvement
+    if (transaction.owner.toString() !== req.userId && transaction.borrower.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    await Notification.updateMany(
+      { recipient: req.userId, transactionId: req.params.transactionId, isRead: false },
+      { isRead: true }
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ msg: err.message });
@@ -832,6 +1266,18 @@ router.post("/reviews", verifyToken, async (req, res) => {
 
     const transaction = await Transaction.findById(transactionId);
     if (!transaction) return res.status(404).json({ msg: "Transaction record not found" });
+
+    if (!isParticipant(transaction, req.userId)) {
+      return res.status(403).json({ msg: "Only transaction participants can review." });
+    }
+
+    if (![transaction.owner.toString(), transaction.borrower.toString()].includes(targetUserId)) {
+      return res.status(400).json({ msg: "Review target must be a transaction participant." });
+    }
+
+    if (targetUserId === req.userId) {
+      return res.status(400).json({ msg: "You cannot review yourself." });
+    }
 
     if (transaction.status !== "SETTLED") {
       return res.status(400).json({ msg: "Feedback reviews are blocked until transaction is fully settled." });
@@ -954,6 +1400,192 @@ router.get("/transactions/:id", verifyToken, async (req, res) => {
     }
 
     res.json(transaction);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+
+// --- OWNER INSIGHTS & BOOKMARKS ENDPOINTS ---
+
+// 1. Toggle Bookmark for a product
+router.post("/products/:id/bookmark", verifyToken, async (req, res) => {
+  try {
+    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ msg: "Invalid product ID format." });
+    }
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ msg: "Product not found" });
+
+    const existingBookmark = await Bookmark.findOne({ user: req.userId, product: productId });
+    if (existingBookmark) {
+      await Bookmark.deleteOne({ _id: existingBookmark._id });
+      return res.json({ bookmarked: false, msg: "Bookmark removed" });
+    } else {
+      await Bookmark.create({ user: req.userId, product: productId });
+      return res.json({ bookmarked: true, msg: "Bookmark added" });
+    }
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// 2. Get all bookmarked product IDs for current user
+router.get("/products/bookmarks/ids", verifyToken, async (req, res) => {
+  try {
+    const bookmarks = await Bookmark.find({ user: req.userId }).select("product");
+    res.json(bookmarks.map(b => b.product));
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// 3. Get Owner Insights for a specific product
+router.get("/products/:id/insights", verifyToken, async (req, res) => {
+  try {
+    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ msg: "Invalid product ID format." });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ msg: "Product not found" });
+
+    // Verify ownership
+    if (product.owner.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Access denied: You are not the owner of this listing." });
+    }
+
+    // A. Saves Calculation directly from Bookmark collection
+    const totalSaves = await Bookmark.countDocuments({ product: product._id });
+
+    // B. Negotiation Analytics
+    const allTxs = await Transaction.find({ product: product._id });
+    const totalNegotiationRequests = allTxs.length;
+
+    const acceptedNegotiations = allTxs.filter(tx => 
+      ["AWAITING_PAYMENT", "RESERVED", "IN_POSSESSION", "RETURN_INITIATED", "DAMAGE_REVIEW", "REFUND_PROCESSING", "DISPUTED", "SETTLED"].includes(tx.status)
+    ).length;
+
+    const rejectedNegotiations = allTxs.filter(tx => tx.status === "NEGOTIATION_DECLINED").length;
+    const pendingNegotiations = allTxs.filter(tx => tx.status === "PENDING_NEGOTIATION").length;
+
+    let acceptanceRate = 0;
+    if (totalNegotiationRequests > 0) {
+      acceptanceRate = parseFloat(((acceptedNegotiations / totalNegotiationRequests) * 100).toFixed(1));
+    }
+
+    // C. Micro-Auction Eligibility
+    const requestsLast2Hours = allTxs.filter(tx => tx.createdAt >= new Date(Date.now() - 2 * 60 * 60 * 1000)).length;
+    const auctionThreshold = 5;
+    const auctionProgressPercentage = Math.min(100, Math.round((requestsLast2Hours / auctionThreshold) * 100));
+    const auctionEligible = requestsLast2Hours >= auctionThreshold;
+
+    // D. Price Health
+    const categoryProducts = await Product.find({ category: product.category, status: { $ne: "INACTIVE" } });
+    let averageCategoryPrice = 0;
+    if (categoryProducts.length > 0) {
+      const sum = categoryProducts.reduce((acc, p) => acc + p.rentalPrice, 0);
+      averageCategoryPrice = parseFloat((sum / categoryProducts.length).toFixed(1));
+    }
+
+    let ownerPriceDifferencePercentage = 0;
+    if (averageCategoryPrice > 0) {
+      ownerPriceDifferencePercentage = parseFloat((((product.rentalPrice - averageCategoryPrice) / averageCategoryPrice) * 100).toFixed(1));
+    }
+
+    let priceHealthLabel = "COMPETITIVE";
+    if (ownerPriceDifferencePercentage < -10) {
+      priceHealthLabel = "UNDER_MARKET";
+    } else if (ownerPriceDifferencePercentage > 10) {
+      priceHealthLabel = "ABOVE_MARKET";
+    }
+
+    // E. Demand Index
+    const viewsWeight = 0.5;
+    const savesWeight = 2.0;
+    const pendingWeight = 5.0;
+    const recentWeight = 12.0;
+
+    const rawScore = (product.views || 0) * viewsWeight + 
+                      totalSaves * savesWeight + 
+                      pendingNegotiations * pendingWeight + 
+                      requestsLast2Hours * recentWeight;
+
+    const demandIndex = Math.min(100, Math.round(rawScore));
+
+    let demandLabel = "LOW";
+    if (demandIndex > 85) {
+      demandLabel = "HOT";
+    } else if (demandIndex > 65) {
+      demandLabel = "HIGH";
+    } else if (demandIndex > 40) {
+      demandLabel = "GOOD";
+    } else if (demandIndex > 20) {
+      demandLabel = "MODERATE";
+    }
+
+    // F. Views calculations
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const todayBucket = (product.analytics?.dailyViews || []).find(b => {
+      const d = new Date(b.date);
+      d.setUTCHours(0, 0, 0, 0);
+      return d.getTime() === today.getTime();
+    });
+    const viewsToday = todayBucket ? todayBucket.count : 0;
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+
+    const viewsLast7Days = (product.analytics?.dailyViews || [])
+      .filter(b => new Date(b.date) >= sevenDaysAgo)
+      .reduce((sum, b) => sum + b.count, 0);
+
+    const dailyViews = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setUTCHours(0, 0, 0, 0);
+      const dayStr = d.toLocaleDateString("en-US", { weekday: "short" });
+
+      const bucket = (product.analytics?.dailyViews || []).find(b => {
+        const bd = new Date(b.date);
+        bd.setUTCHours(0, 0, 0, 0);
+        return bd.getTime() === d.getTime();
+      });
+
+      dailyViews.push({
+        day: dayStr,
+        count: bucket ? bucket.count : 0
+      });
+    }
+
+    res.json({
+      views: product.views || 0,
+      viewsToday,
+      viewsLast7Days,
+      totalSaves,
+      totalNegotiationRequests,
+      acceptedNegotiations,
+      rejectedNegotiations,
+      pendingNegotiations,
+      acceptanceRate,
+      requestsLast2Hours,
+      auctionThreshold,
+      auctionProgressPercentage,
+      auctionEligible,
+      averageCategoryPrice,
+      ownerPriceDifferencePercentage,
+      priceHealthLabel,
+      demandIndex,
+      demandLabel,
+      dailyViews,
+      status: product.status
+    });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }

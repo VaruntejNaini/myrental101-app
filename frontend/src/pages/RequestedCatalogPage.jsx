@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOffer, handleDeleteWish }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const cardRef = useRef(null);
   const hasTriggered = useRef(false);
 
-  const isCreator = currentUser && (
-    (wish.creator && wish.creator._id === currentUser._id) ||
-    (wish.creator === currentUser._id)
-  );
+  const isCreator = currentUser && wish.creator && 
+    String(wish.creator._id || wish.creator) === String(currentUser._id);
 
   useEffect(() => {
     if (hasTriggered.current) return;
@@ -94,11 +93,15 @@ const WishCard = ({ wish, currentUser, isNight, handlePitchQuote, handleAcceptOf
       <div className="mt-auto">
         {isCreator ? (
           <div className="flex items-center justify-between border-t border-slate-800 pt-3">
-            <a href="#insights" className="text-xs text-indigo-400 hover:underline font-bold">
+            <button 
+              type="button" 
+              onClick={(e) => e.stopPropagation()} 
+              className="text-xs text-indigo-400 hover:underline font-bold bg-transparent border-none p-0 cursor-pointer"
+            >
               📊 Insights
-            </a>
+            </button>
             <span className="text-xs text-slate-400">
-              views: <strong className="text-indigo-400">{wish.views || 0}</strong>
+              views: <strong className="text-indigo-400">{wish.views ?? 0}</strong>
             </span>
           </div>
         ) : (
@@ -160,14 +163,16 @@ export default function RequestedCatalogPage() {
 
   useEffect(() => {
     syncWishes();
-    const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    setBookmarkedIds(existing.map(x => x.id));
+    if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+      setBookmarkedIds(existing.map(x => x.id));
 
-    // Fetch logged in user profile
-    if (localStorage.getItem("token")) {
+      // Fetch logged in user profile
       API.get("/auth/me")
         .then(res => setCurrentUser(res.data))
         .catch(err => console.error("Error fetching user profile:", err));
+    } else {
+      setBookmarkedIds([]);
     }
   }, []);
 

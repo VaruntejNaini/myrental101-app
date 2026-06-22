@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 export default function DesktopChatbox() {
   const [activeChats, setActiveChats] = useState([]);
@@ -127,14 +129,15 @@ export default function DesktopChatbox() {
 }
 
 function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose }) {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [txDetails, setTxDetails] = useState(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
 
-  const currentUserId = localStorage.getItem("token")
-    ? JSON.parse(atob(localStorage.getItem("token").split(".")[1])).id
+  const currentUserId = localStorage.getItem(STORAGE_KEYS.TOKEN)
+    ? JSON.parse(atob(localStorage.getItem(STORAGE_KEYS.TOKEN).split(".")[1])).id
     : null;
   const myProfilePic = localStorage.getItem("userProfilePic") || "";
   const myName = localStorage.getItem("user_name") || "Me";
@@ -184,6 +187,20 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
       const interval = setInterval(fetchMessages, 4000);
       return () => clearInterval(interval);
     }
+  }, [chat.transactionId, chat.isMinimized]);
+
+  // Clear any transaction-level notifications when entering/opening a thread
+  useEffect(() => {
+    if (!chat.transactionId || chat.isMinimized) return;
+    const clearNotifications = async () => {
+      try {
+        await API.post(`/rent/notifications/transaction/${chat.transactionId}/read`);
+        window.dispatchEvent(new Event("refreshNotificationCount"));
+      } catch (err) {
+        console.error("Error clearing transaction notifications:", err);
+      }
+    };
+    clearNotifications();
   }, [chat.transactionId, chat.isMinimized]);
 
   // Read message triggers: mark thread as read when focused and unread messages from other user exist
@@ -264,13 +281,23 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
     }
   };
 
+  const handleResolveNegotiation = async (action) => {
+    try {
+      const res = await API.post(`/rent/negotiate/${chat.transactionId}/resolve`, { action });
+      setTxDetails(res.data);
+      window.dispatchEvent(new Event("refreshNotificationCount"));
+    } catch (err) {
+      console.error("Error resolving negotiation in chat:", err);
+    }
+  };
+
   return (
     <div
       onClick={onFocus}
       className={`w-80 bg-white dark:bg-zinc-950 border rounded-t-2xl shadow-[0_-5px_25px_rgba(0,0,0,0.15)] flex flex-col transition-all duration-300 ${
         isFocused 
-          ? "border-indigo-500 ring-1 ring-indigo-500/20" 
-          : "border-slate-200 dark:border-zinc-850"
+          ? "border-indigo-500 ring-2 ring-indigo-500/20" 
+          : "border-slate-300 dark:border-zinc-850"
       }`}
       style={{
         height: chat.isMinimized ? "48px" : "400px",
@@ -281,7 +308,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
       <div
         className={`h-12 px-3 flex items-center justify-between rounded-t-2xl text-white cursor-pointer transition-colors duration-250 select-none ${
           isFocused 
-            ? "bg-indigo-650 dark:bg-indigo-600" 
+            ? "bg-gradient-to-r from-indigo-600 to-violet-600" 
             : "bg-slate-500 dark:bg-zinc-800"
         }`}
         onClick={() => onMinimize(!chat.isMinimized)}
@@ -304,14 +331,14 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
         <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => onMinimize(!chat.isMinimized)}
-            className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold"
+            className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold focus-visible:ring-1 focus-visible:ring-white focus-visible:outline-none"
             title={chat.isMinimized ? "Expand" : "Minimize"}
           >
             {chat.isMinimized ? "➕" : "➖"}
           </button>
           <button
             onClick={onClose}
-            className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold"
+            className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold focus-visible:ring-1 focus-visible:ring-white focus-visible:outline-none"
             title="Close"
           >
             ✕
@@ -324,43 +351,79 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
         <>
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto p-3 space-y-3 flex flex-col bg-slate-50 dark:bg-zinc-900/40"
+            className="flex-1 overflow-y-auto p-3 space-y-3 flex flex-col bg-slate-50/50 dark:bg-zinc-950/80"
           >
-            {/* Negotiation Subtext Banner */}
-            <div className="text-center py-2 px-3 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100/30 dark:border-indigo-900/30 rounded-xl">
-              <span className="text-[10px] uppercase font-black tracking-wider text-indigo-500 block">
-                Negotiate price for the product
-              </span>
-            </div>
+            {/* Negotiation Subtext Banner & Actions */}
+            {txDetails?.status === "RETRACTED" ? (
+              <div className="text-center py-2 px-3 bg-red-50 dark:bg-red-950/10 border border-red-100/30 dark:border-red-900/30 rounded-xl m-1 animate-fadeIn">
+                <span className="text-[10px] uppercase font-black tracking-wider text-red-600 dark:text-red-400 block leading-tight">
+                  This listing was withdrawn by the owner.
+                </span>
+                <span className="text-[9px] font-bold text-slate-500 dark:text-zinc-400 block mt-0.5">
+                  This transaction has been closed.
+                </span>
+              </div>
+            ) : (
+              <div className="text-center py-2 px-3 bg-indigo-50 dark:bg-indigo-950/10 border border-indigo-100/30 dark:border-indigo-900/30 rounded-xl">
+                <span className="text-[10px] uppercase font-black tracking-wider text-indigo-600 dark:text-indigo-400 block">
+                  Negotiate price for the product
+                </span>
+                {txDetails?.status === "PENDING_NEGOTIATION" && (
+                  isOwner ? (
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => handleResolveNegotiation("ACCEPT")}
+                        className="flex-1 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center"
+                      >
+                        Accept Offer
+                      </button>
+                      <button
+                        onClick={() => handleResolveNegotiation("REJECT")}
+                        className="flex-1 py-1 px-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center"
+                      >
+                        Reject Offer
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] font-bold text-slate-500 dark:text-zinc-400 block mt-1">
+                      Waiting for owner to accept or reject your offer...
+                    </span>
+                  )
+                )}
+                {txDetails?.status === "AWAITING_PAYMENT" && (
+                  !isOwner ? (
+                    <button
+                      onClick={() => navigate(`/rent/checkout/${chat.transactionId}`)}
+                      className="w-full py-1 px-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[9px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center mt-2"
+                    >
+                      Proceed to Checkout
+                    </button>
+                  ) : (
+                    <span className="text-[9px] font-bold text-slate-500 dark:text-zinc-400 block mt-1">
+                      Waiting for borrower payment checkout...
+                    </span>
+                  )
+                )}
+              </div>
+            )}
 
             {/* Message Thread */}
             {messages.map((msg) => {
               const isMe = msg.sender === currentUserId || msg.sender?._id === currentUserId;
-              const senderPic = isMe ? myProfilePic : resolvedOtherUser?.profilePic;
-              const senderName = isMe ? myName : resolvedOtherUser?.name;
 
               return (
                 <div
                   key={msg._id}
                   className={`flex items-end gap-2 max-w-[85%] ${
-                    isMe ? "self-end flex-row-reverse" : "self-start"
+                    isMe ? "self-end" : "self-start"
                   }`}
                 >
-                  {/* Circle Avatar */}
-                  <div className="w-6 h-6 rounded-full bg-slate-350 dark:bg-zinc-700 flex-shrink-0 flex items-center justify-center overflow-hidden text-[9px] font-black text-slate-800 dark:text-white">
-                    {senderPic ? (
-                      <img src={senderPic} alt={senderName} className="w-full h-full object-cover" />
-                    ) : (
-                      senderName ? senderName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "👤"
-                    )}
-                  </div>
-
                   {/* Message Bubble */}
                   <div
                     className={`p-2.5 rounded-2xl text-xs leading-normal font-semibold shadow-sm ${
                       isMe
-                        ? "bg-violet-650 dark:bg-violet-600 text-white rounded-br-none"
-                        : "bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-white rounded-bl-none"
+                        ? "bg-indigo-500 text-white rounded-br-none"
+                        : "bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 border border-slate-200 dark:border-zinc-700/60 rounded-bl-none"
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -374,19 +437,21 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
           {/* Footer Input */}
           <form
             onSubmit={handleSendMessage}
-            className="p-2 border-t border-slate-100 dark:border-zinc-850 flex items-center gap-1.5 bg-white dark:bg-zinc-950"
+            className="p-2 border-t border-slate-200/80 dark:border-zinc-850 flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-900"
           >
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onFocus={onFocus}
-              placeholder="Type a message..."
-              className="flex-1 bg-slate-100 dark:bg-zinc-850 focus:bg-white dark:focus:bg-zinc-900 border border-transparent focus:border-slate-200 dark:focus:border-zinc-800 outline-none rounded-2xl py-1.5 px-3.5 text-xs font-semibold text-slate-800 dark:text-white placeholder-[#9CA3AF]"
+              disabled={txDetails?.status === "RETRACTED"}
+              placeholder={txDetails?.status === "RETRACTED" ? "Transaction is inactive" : "Type a message..."}
+              className="flex-1 bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 focus:border-indigo-500 focus-visible:ring-1 focus-visible:ring-indigo-500/30 outline-none rounded-2xl py-1.5 px-3.5 text-xs font-semibold text-slate-800 dark:text-white placeholder-[#9CA3AF] disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              className="w-7 h-7 flex items-center justify-center bg-indigo-650 hover:bg-indigo-700 text-white rounded-full cursor-pointer transition-colors shadow-sm"
+              disabled={txDetails?.status === "RETRACTED"}
+              className="w-7 h-7 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full cursor-pointer transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               title="Send"
             >
               ➔

@@ -21,6 +21,7 @@ export default function RentCheckout() {
   const [agreed, setAgreed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [productDetails, setProductDetails] = useState(null);
+  const [transactionDetails, setTransactionDetails] = useState(null);
 
   const getBackendId = (paramId) => {
     if (paramId === "r-1" || paramId === "rent_camera_1") return "60d5ecb8b5c9c93d98e8a8a1";
@@ -36,12 +37,43 @@ export default function RentCheckout() {
     setDays(parseInt(sessionStorage.getItem("rental_days") || "3"));
 
     const backendId = getBackendId(id);
-    API.get(`/rent/products/${backendId}`)
-      .then((res) => {
-        setProductDetails(res.data.product);
+    
+    API.get(`/rent/transactions/${backendId}`)
+      .then((txRes) => {
+        setTransactionDetails(txRes.data);
+        setProductDetails(txRes.data.product);
+        if (txRes.data.startDate) {
+          setStartDate(new Date(txRes.data.startDate).toISOString().split('T')[0]);
+        }
+        if (txRes.data.endDate) {
+          setEndDate(new Date(txRes.data.endDate).toISOString().split('T')[0]);
+        }
+        const calculatedDays = Math.ceil(Math.abs(new Date(txRes.data.endDate) - new Date(txRes.data.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+        setDays(calculatedDays || 1);
       })
-      .catch((err) => console.error("Error loading product for checkout:", err));
+      .catch(() => {
+        API.get(`/rent/products/${backendId}`)
+          .then((res) => {
+            setProductDetails(res.data.product);
+          })
+          .catch((err) => console.error("Error loading product for checkout:", err));
+      });
   }, [id]);
+
+  if (transactionDetails && transactionDetails.status === "RETRACTED") {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${isNight ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-800"}`}>
+        <div className="max-w-md p-8 rounded-3xl border text-center space-y-4 border-red-500/20 bg-red-500/5 shadow-xl">
+          <div className="text-4xl">🔴</div>
+          <h2 className="text-xl font-black text-red-500">Transaction Retracted</h2>
+          <p className="text-sm text-slate-400">This listing has been withdrawn by the owner. You can no longer proceed to checkout.</p>
+          <button onClick={() => navigate("/dashboard")} className="px-6 py-2.5 bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer transition-all">
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!productDetails) {
     return (
@@ -72,22 +104,32 @@ export default function RentCheckout() {
     setIsProcessing(true);
 
     try {
-      // Create transaction first
-      const backendId = getBackendId(id);
-      const negotiationRes = await API.post("/rent/negotiate", {
-        productId: backendId,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        dailyRate: productDetails.rentalPrice,
-        securityDeposit: productDetails.securityDeposit,
-      });
+      let transactionId;
+      if (transactionDetails) {
+        transactionId = transactionDetails._id;
+        if (transactionDetails.status !== "AWAITING_PAYMENT" && transactionDetails.status !== "ACCEPTED" && transactionDetails.status !== "RESERVED") {
+          await API.post(`/rent/negotiate/${transactionId}/resolve`, {
+            action: "ACCEPT"
+          });
+        }
+      } else {
+        // Create transaction first
+        const backendId = getBackendId(id);
+        const negotiationRes = await API.post("/rent/negotiate", {
+          productId: backendId,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+          dailyRate: productDetails.rentalPrice,
+          securityDeposit: productDetails.securityDeposit,
+        });
 
-      const transactionId = negotiationRes.data._id;
+        transactionId = negotiationRes.data._id;
 
-      // Update negotiation status to simulate accepting offer if needed
-      await API.post(`/rent/negotiate/${transactionId}/resolve`, {
-        action: "ACCEPT"
-      });
+        // Update negotiation status to simulate accepting offer if needed
+        await API.post(`/rent/negotiate/${transactionId}/resolve`, {
+          action: "ACCEPT"
+        });
+      }
 
       // Submit checkout details securely
       const checkoutRes = await API.post(`/rent/checkout/${transactionId}`);

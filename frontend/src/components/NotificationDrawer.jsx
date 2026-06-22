@@ -61,6 +61,33 @@ export default function NotificationDrawer({ isOpen, onClose }) {
     }
   };
 
+  const handleClearTransactionNotifications = async (txId, otherUser, productTitle) => {
+    try {
+      await API.post(`/rent/notifications/transaction/${txId}/read`);
+      // Update local state immediately (no flicker)
+      setNotifications(prev => prev.filter(n => {
+        const txMatch = n.link ? n.link.match(/tx=([^&#=]*)/) : null;
+        const currentTxId = n.transactionId || (txMatch ? txMatch[1] : null);
+        return currentTxId !== txId;
+      }));
+      window.dispatchEvent(new Event("refreshNotificationCount"));
+      
+      // Open the chatbox
+      window.dispatchEvent(
+        new CustomEvent("openChatbox", {
+          detail: {
+            transactionId: txId,
+            otherUser,
+            productTitle: productTitle || "Item"
+          }
+        })
+      );
+      onClose();
+    } catch (err) {
+      console.error("Error clearing transaction notifications:", err);
+    }
+  };
+
   const handleMarkAllAsRead = async (e) => {
     e.preventDefault();
     try {
@@ -137,11 +164,13 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 NEGOTIATION: "border-l-indigo-500 border-indigo-500/15 bg-indigo-500/5 dark:border-indigo-500/25 dark:bg-indigo-500/10",
                 ORDER: "border-l-emerald-500 border-emerald-500/15 bg-emerald-500/5 dark:border-emerald-500/25 dark:bg-emerald-500/10",
                 SYSTEM: "border-l-amber-500 border-amber-500/15 bg-amber-500/5 dark:border-amber-500/25 dark:bg-amber-500/10",
+                OFFER_RETRACTED: "border-l-rose-500 border-rose-500/15 bg-rose-500/5 dark:border-rose-500/25 dark:bg-rose-500/10",
               };
               const emojiMap = {
                 NEGOTIATION: "💬",
                 ORDER: "📦",
                 SYSTEM: "🔔",
+                OFFER_RETRACTED: "🚫",
               };
               return (
                 <div
@@ -153,7 +182,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                   <div className="flex justify-between items-start gap-2">
                     <span className="text-xs font-black uppercase tracking-wider text-slate-450 flex items-center gap-1.5">
                       <span>{emojiMap[notif.type]}</span>
-                      {notif.type}
+                      {notif.type === "OFFER_RETRACTED" ? "Offer Retracted" : notif.type}
                     </span>
                     <button
                       onClick={() => handleMarkAsRead(notif._id)}
@@ -219,18 +248,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                               </div>
                             )}
                             <button
-                              onClick={() => {
-                                window.dispatchEvent(
-                                  new CustomEvent("openChatbox", {
-                                    detail: {
-                                      transactionId: txId,
-                                      otherUser: notif.sender,
-                                      productTitle: notif.message || "Item"
-                                    }
-                                  })
-                                );
-                                onClose();
-                              }}
+                              onClick={() => handleClearTransactionNotifications(txId, notif.sender, notif.message)}
                               className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
                             >
                               💬 CHAT NOW

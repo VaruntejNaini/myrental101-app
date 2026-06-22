@@ -29,6 +29,13 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    role: {
+      type: String,
+      enum: ["USER", "ADMIN"],
+      default: "USER",
+      index: true,
+    },
+
     // EMAIL OTP
 
     emailOtp: {
@@ -83,6 +90,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    reputationScore: {
+      type: Number,
+      default: 100,
+      index: true,
+    },
+    reputationHistory: [
+      {
+        action: { type: String, required: true },
+        points: { type: Number, required: true },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
   },
 
   {

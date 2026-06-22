@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import ChatDrawer from "./ChatDrawer";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 export default function ChatBell({ isNight }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchUnreadCount = async () => {
-    if (!localStorage.getItem("token")) return;
+    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) return;
     try {
       const res = await API.get("/rent/chat/unread-count");
       setUnreadCount(res.data.unreadCount || 0);

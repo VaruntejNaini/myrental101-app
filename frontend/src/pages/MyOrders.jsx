@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { STORAGE_KEYS } from "../constants/auth";
 
 export default function MyOrders() {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export default function MyOrders() {
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
 
   useEffect(() => {
-    const activeToken = localStorage.getItem("token");
+    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (activeToken) {
       API.get("/auth/me")
         .then(res => {
@@ -48,60 +49,62 @@ export default function MyOrders() {
 
   // Sync state machine items
   const syncRentals = () => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (!token) return;
 
-    // Direct database mapping query
-    API.get("/addresses") // using verifyToken route trigger dummy check or verify directly
-      .then(async () => {
-        // Fetch all user active transactions
-        const prodRes = await API.get("/rent/products");
-        // We look up all mock matching transaction entries directly
-        // Fetching listings
+    API.get("/rent/transactions")
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          const mappedRentals = res.data.map(tx => ({
+            _id: tx._id,
+            title: tx.product ? tx.product.title : "Deleted Listing",
+            rate: `₹${tx.dailyRate}/day`,
+            status: tx.status,
+            startDate: new Date(tx.startDate).toLocaleDateString([], { month: "short", day: "numeric" }),
+            endDate: new Date(tx.endDate).toLocaleDateString([], { month: "short", day: "numeric" }),
+            borrower: tx.borrower || { name: "Borrower" },
+            owner: tx.owner || { name: "Owner" },
+            totalPaid: tx.totalPaid,
+            securityDeposit: tx.securityDeposit,
+            damageReport: tx.damageReport,
+            claimAmount: tx.claimAmount,
+            claimStatus: tx.claimStatus,
+            disputeReason: tx.disputeReason,
+          }));
+          setActiveRentals(mappedRentals);
+        } else {
+          // Fallback/Seed default list for testing if database has no entries yet
+          setActiveRentals([
+            {
+              _id: "60d5ecb8b5c9c93d98e8a8e1",
+              title: "Canon EOS R50 Camera",
+              rate: "₹450/day",
+               status: "RESERVED",
+              startDate: "12 June",
+              endDate: "15 June",
+              borrower: { name: userName },
+              owner: { name: "Arjun K." }
+            },
+            {
+              _id: "60d5ecb8b5c9c93d98e8a8e2",
+              title: "Honda Activa Scooter",
+              rate: "₹250/day",
+              status: "IN_POSSESSION",
+              startDate: "08 June",
+              endDate: "10 June",
+              borrower: { name: userName },
+              owner: { name: "Rahul P." }
+            }
+          ]);
+        }
       })
-      .catch(err => console.error(err));
-
-    // Fallback: populate live transaction records created in sessionStorage
-    const activeBookingId = sessionStorage.getItem("active_booking_id");
-    const activeBookingItem = sessionStorage.getItem("active_booking_item");
-    const activeBookingTotal = sessionStorage.getItem("active_booking_total");
-    
-    if (activeBookingId && activeBookingItem) {
-      // Fetch matching transaction dynamically
-      API.get(`/rent/products`)
-        .then(async (res) => {
-          // Since it's stored in session let's make an active timeline card
-          // Setup tracker structure
-        })
-        .catch(err => console.log(err));
-    }
+      .catch(err => {
+        console.error("Error fetching transactions:", err);
+      });
   };
 
-  // Run initial mock lookup
   useEffect(() => {
-    // Seed default list matching the state transition workflow
-    setActiveRentals([
-      {
-        _id: "60d5ecb8b5c9c93d98e8a8e1",
-        title: "Canon EOS R50 Camera",
-        rate: "₹450/day",
-        status: "RESERVED",
-        startDate: "12 June",
-        endDate: "15 June",
-        borrower: { name: userName },
-        owner: { name: "Arjun K." }
-      },
-      {
-        _id: "60d5ecb8b5c9c93d98e8a8e2",
-        title: "Honda Activa Scooter",
-        rate: "₹250/day",
-        status: "IN_POSSESSION",
-        startDate: "08 June",
-        endDate: "10 June",
-        borrower: { name: userName },
-        owner: { name: "Rahul P." }
-      }
-    ]);
+    syncRentals();
   }, [userName]);
 
   const handleGenerateOtp = async (txId, type) => {
@@ -237,7 +240,11 @@ export default function MyOrders() {
           <div key={rent._id} className={`p-6 rounded-3xl border ${isNight ? "bg-slate-900 border-slate-800" : "bg-white border-slate-205"}`}>
             <div className="flex justify-between items-start flex-wrap gap-4 border-b border-slate-800/40 pb-4 mb-4">
               <div>
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{rent.status}</span>
+                {rent.status === "RETRACTED" ? (
+                  <span className="text-[10px] bg-red-500/10 text-red-550 font-bold px-2 py-0.5 rounded border border-red-500/20">RETRACTED</span>
+                ) : (
+                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{rent.status}</span>
+                )}
                 <h3 className="font-extrabold text-base mt-2">{rent.title}</h3>
                 <p className="text-xs text-slate-450 mt-1">Daily Rent: {rent.rate}</p>
               </div>
@@ -338,6 +345,13 @@ export default function MyOrders() {
                     <span className="font-extrabold text-emerald-500">✓ TRANSACTION SETTLED</span>
                   </div>
                 )}
+
+                {rent.status === "RETRACTED" && (
+                  <div className="p-3 bg-red-500/5 border border-red-500/10 rounded-2xl text-xs">
+                    <span className="font-extrabold text-red-500">🔴 Retracted</span>
+                    <p className="text-slate-400 mt-1">This listing was removed by the owner. This transaction is no longer active.</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -358,12 +372,17 @@ export default function MyOrders() {
                   <div className="flex gap-2 mt-2">
                     <input
                       type="text"
-                      placeholder="Type message..."
+                      disabled={rent.status === "RETRACTED"}
+                      placeholder={rent.status === "RETRACTED" ? "Transaction is inactive" : "Type message..."}
                       value={chatInputs[rent._id] || ""}
                       onChange={(e) => setChatInputs(prev => ({ ...prev, [rent._id]: e.target.value }))}
-                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs focus:outline-none"
+                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
-                    <button onClick={() => handleSendChat(rent._id, "60d5ecb8b5c9c93d98e8a8b1")} className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs">
+                    <button 
+                      onClick={() => handleSendChat(rent._id, "60d5ecb8b5c9c93d98e8a8b1")} 
+                      disabled={rent.status === "RETRACTED"}
+                      className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Send
                     </button>
                   </div>

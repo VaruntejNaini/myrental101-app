@@ -5,7 +5,7 @@ const productSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true, index: true },
     description: { type: String, required: true },
     category: { type: String, required: true, index: true },
-    images: { type: [String], default: [] },
+    images: { type: [mongoose.Schema.Types.Mixed], default: [] },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     rentalPrice: { type: Number, required: true },
     securityDeposit: { type: Number, required: true },
@@ -20,6 +20,16 @@ const productSchema = new mongoose.Schema(
     },
     currentBid: { type: Number, default: 0 },
     auctionEndTime: { type: Date, index: true },
+    activeAuctionId: { type: mongoose.Schema.Types.ObjectId, ref: "Auction", default: null },
+    views: { type: Number, default: 0 },
+    analytics: {
+      dailyViews: [
+        {
+          date: { type: Date, default: Date.now },
+          count: { type: Number, default: 0 }
+        }
+      ]
+    },
     location: {
       type: { type: String, default: "Point" },
       coordinates: { type: [Number], default: [78.4867, 17.385] }, // [longitude, latitude], defaults to Hyd

@@ -1,0 +1,204 @@
+/* Footer.css — v2 redesign inspired by Rentit-style footer */
+
+/* ── Root container ─────────────────────────────────────────────────────────── */
+.footer-v2 {
+  background: linear-gradient(160deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
+  color: rgba(255, 255, 255, 0.85);
+  padding: 3.5rem 2rem 2rem;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* ── Four-column link grid ───────────────────────────────────────────────────── */
+.footer-v2__columns {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto 3rem;
+}
+
+.footer-v2__col-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 1rem;
+}
+
+.footer-v2__col-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.footer-v2__col-link {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 400;
+  transition: color 0.2s ease;
+}
+
+.footer-v2__col-link:hover {
+  color: #ffffff;
+}
+
+/* ── Centered brand ─────────────────────────────────────────────────────────── */
+.footer-v2__brand-center {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.footer-v2__logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.footer-v2__logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.footer-v2__logo-name {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+/* ── Language & Currency selectors ──────────────────────────────────────────── */
+.footer-v2__selectors {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.footer-v2__select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.footer-v2__select-wrap:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.footer-v2__select-icon {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.footer-v2__select {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+}
+
+.footer-v2__select option {
+  background: #312e81;
+  color: #fff;
+}
+
+.footer-v2__chevron {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────────── */
+.footer-v2__divider {
+  max-width: 900px;
+  margin: 0 auto 1.5rem;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Bottom bar ─────────────────────────────────────────────────────────────── */
+.footer-v2__bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.footer-v2__legal-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-v2__legal-link {
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 0.2s ease;
+}
+
+.footer-v2__legal-link:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.footer-v2__dot {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.65rem;
+}
+
+.footer-v2__copyright {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0;
+  text-align: center;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .footer-v2__columns {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .footer-v2__columns {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  .footer-v2__selectors {
+    flex-direction: column;
+    align-items: center;
+  }
+}

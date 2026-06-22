@@ -5,6 +5,7 @@ import Wish from "../models/Wish.js";
 import Notification from "../models/Notification.js";
 import Product from "../models/Product.js";
 import Transaction from "../models/Transaction.js";
+import { awardReputation } from "../services/reputationService.js";
 
 const router = express.Router();
 
@@ -54,6 +55,9 @@ router.post("/", verifyToken, async (req, res) => {
       durationDays,
       creator: req.userId,
     });
+
+    // Award +2 Reputation points for creating a wish request
+    await awardReputation(req.userId, 2, "WISH_CREATED");
     
     res.status(201).json(wish);
   } catch (err) {

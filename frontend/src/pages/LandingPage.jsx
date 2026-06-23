@@ -466,7 +466,7 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
         </p>
 
         <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
-          <span>📍</span> {item.area || "Local"}
+          <span><i className ="fa-chisel fa-regular fa-location-dot"></i></span> {item.area || "Local"}
         </p>
 
         <div className="mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center w-full">
@@ -965,7 +965,7 @@ export default function Dashboard() {
         localStorage.setItem("saved_delivery_address", locationName);
         setSavedAddress(locationName);
         setAddressModalOpen(false);
-        triggerToast(`Location updated! Services to ${locationName} 📍`);
+        triggerToast(`Location updated! Services to ${locationName} <i className ="fa-chisel fa-regular fa-location-dot"></i>`);
       } else {
         setPincodeError("Could not resolve location for this pincode.");
       }

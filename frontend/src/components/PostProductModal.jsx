@@ -108,7 +108,9 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     images: validateImages(selectedFiles)
   };
 
-  const isPublishDisabled = Object.values(errors).some(Boolean) || !!error || !!duplicateError;
+const isPublishDisabled =
+  Object.values(errors).some(Boolean) ||
+  !!duplicateError;
 
   // Helper to compute CSS classes for inputs
   const getFieldClass = (field, value, hasError) => {
@@ -362,6 +364,7 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
         formData.append("productImages", file);
       });
 
+      console.log('>>> FRONTEND: Posting /api/rent/products, files:', selectedFiles.length, 'title:', title);
       await API.post("/rent/products", formData);
 
       setIsSubmitting(false);
@@ -394,8 +397,10 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     } catch (err) {
       setIsSubmitting(false);
       setError(err.response?.data?.msg || "Failed to post product listing.");
-    }
-  };
+    
+  }
+  
+};
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/75 backdrop-blur-md px-4 py-6 overflow-y-auto">

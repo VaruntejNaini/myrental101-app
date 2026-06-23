@@ -439,6 +439,11 @@ router.post("/products", verifyToken, upload.array("productImages", 5), async (r
   }
 
   const uploadedAssets = [];
+  console.log('>>> EXPRESS: Received POST /api/rent/products. headers:', {
+    'content-type': req.headers['content-type'],
+    authorization: !!req.headers['authorization']
+  });
+  console.log('>>> EXPRESS: multer parsed files count:', (req.files || []).length, 'body keys:', Object.keys(req.body || {}));
   try {
     if (!req.body) {
       throw new Error("req.body is undefined. Multipart parsing might have failed.");

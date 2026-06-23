@@ -238,6 +238,19 @@ ${message}
 });
 
 
+// --- global JSON error handler for uploads and other errors
+app.use((err, req, res, next) => {
+  console.error('GLOBAL ERROR:', err && (err.stack || err.message));
+  if (!res.headersSent) {
+    // Handle Multer errors and explicit file filter errors
+    if (err && (err.name === 'MulterError' || err.message === 'Only image files are allowed!')) {
+      return res.status(400).json({ msg: err.message });
+    }
+    // Generic error
+    return res.status(500).json({ msg: err && err.message ? err.message : 'Internal server error' });
+  }
+  next(err);
+});
 
 const PORT = process.env.PORT || 5000;
 

@@ -5,16 +5,20 @@ import { logFailure } from "../services/auditService.js";
 export const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
+  console.log('>>> AUTH: verifyToken invoked. Authorization header present:', !!authHeader);
 
   if (!token) {
+    console.log('>>> AUTH: No token present - blocking request.');
     return res.status(403).json({ msg: "umm! we can't identify you please register / login into our page first for using our platform" });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.id;
+    console.log('>>> AUTH: Token verified. userId=', req.userId);
     next();
   } catch (err) {
+    console.log('>>> AUTH: Token verification failed:', err.message);
     return res.status(401).json({ msg: "Token is invalid or expired" });
   }
 };

@@ -3,9 +3,11 @@ import multer from "multer";
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith("image/")) {
+  console.log('>>> MULTER: fileFilter called for', file.originalname, file.mimetype, file.size);
+  if (file.mimetype && file.mimetype.startsWith && file.mimetype.startsWith("image/")) {
     cb(null, true);
   } else {
+    console.log('>>> MULTER: Rejected file', file.originalname, file.mimetype);
     cb(new Error("Only image files are allowed!"), false);
   }
 };

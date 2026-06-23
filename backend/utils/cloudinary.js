@@ -14,6 +14,7 @@ cloudinary.config({
  * @returns {Promise<Object>}
  */
 export const uploadToCloudinary = (fileBuffer, folder) => {
+  console.log('>>> CLOUDINARY: uploading buffer length=', fileBuffer?.length || 0, 'folder=', folder);
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
@@ -24,8 +25,10 @@ export const uploadToCloudinary = (fileBuffer, folder) => {
       },
       (error, result) => {
         if (error) {
+          console.log('>>> CLOUDINARY: upload error', error);
           reject(error);
         } else {
+          console.log('>>> CLOUDINARY: upload success', result?.secure_url);
           resolve(result);
         }
       }

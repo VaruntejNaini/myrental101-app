@@ -16,19 +16,23 @@ router.get("/", verifyToken, async (req, res) => {
 
 // POST create new address
 router.post("/", verifyToken, async (req, res) => {
-  const {
-    firstName,
-    lastName,
-    mobileNumber,
-    houseFlatNumber,
-    landmark,
-    fullAddress,
-    addressType,
-    latitude,
-    longitude,
-    addressDescription,
-    isDefault
-  } = req.body;
+const {
+  firstName,
+  lastName,
+  mobileNumber,
+  houseFlatNumber,
+  landmark,
+  fullAddress,
+  locality,
+  city,
+  state,
+  pincode,
+  addressType,
+  latitude,
+  longitude,
+  addressDescription,
+  isDefault
+} = req.body;
 
   try {
     // Check if this is the user's first address
@@ -40,20 +44,24 @@ router.post("/", verifyToken, async (req, res) => {
       await Address.updateMany({ userId: req.userId }, { isDefault: false });
     }
 
-    const newAddress = await Address.create({
-      userId: req.userId,
-      firstName,
-      lastName,
-      mobileNumber,
-      houseFlatNumber,
-      landmark,
-      fullAddress,
-      addressType,
-      latitude,
-      longitude,
-      addressDescription,
-      isDefault: makeDefault
-    });
+  const newAddress = await Address.create({
+  userId: req.userId,
+  firstName,
+  lastName,
+  mobileNumber,
+  houseFlatNumber,
+  landmark,
+  fullAddress,
+  locality,
+  city,
+  state,
+  pincode,
+  addressType,
+  latitude,
+  longitude,
+  addressDescription,
+  isDefault: makeDefault
+});
 
     res.status(201).json(newAddress);
   } catch (err) {
@@ -63,19 +71,23 @@ router.post("/", verifyToken, async (req, res) => {
 
 // PUT update an address
 router.put("/:id", verifyToken, async (req, res) => {
-  const {
-    firstName,
-    lastName,
-    mobileNumber,
-    houseFlatNumber,
-    landmark,
-    fullAddress,
-    addressType,
-    latitude,
-    longitude,
-    addressDescription,
-    isDefault
-  } = req.body;
+ const {
+  firstName,
+  lastName,
+  mobileNumber,
+  houseFlatNumber,
+  landmark,
+  fullAddress,
+  locality,
+  city,
+  state,
+  pincode,
+  addressType,
+  latitude,
+  longitude,
+  addressDescription,
+  isDefault
+} = req.body;
 
   try {
     const address = await Address.findOne({ _id: req.params.id, userId: req.userId });
@@ -94,6 +106,10 @@ router.put("/:id", verifyToken, async (req, res) => {
     address.houseFlatNumber = houseFlatNumber || address.houseFlatNumber;
     address.landmark = landmark !== undefined ? landmark : address.landmark;
     address.fullAddress = fullAddress || address.fullAddress;
+    address.locality = locality !== undefined ? locality : address.locality;
+    address.state = state !== undefined ? state : address.state;
+    address.pincode = pincode !== undefined ? pincode : address.pincode;
+    address.city = city !== undefined ? city : address.city;
     address.addressType = addressType || address.addressType;
     address.latitude = latitude !== undefined ? latitude : address.latitude;
     address.longitude = longitude !== undefined ? longitude : address.longitude;

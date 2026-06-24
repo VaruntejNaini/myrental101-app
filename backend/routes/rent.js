@@ -384,38 +384,9 @@ router.get("/products/:id", async (req, res) => {
       }
     }
 
-    // Increment views if viewer is not the owner
-    if (!isOwner) {
-      if (!product.analytics) {
-        product.analytics = { dailyViews: [] };
-      }
-      if (!product.analytics.dailyViews) {
-        product.analytics.dailyViews = [];
-      }
-
-      const today = new Date();
-      today.setUTCHours(0, 0, 0, 0);
-
-      let dailyBucket = product.analytics.dailyViews.find(bucket => {
-        const bucketDate = new Date(bucket.date);
-        bucketDate.setUTCHours(0, 0, 0, 0);
-        return bucketDate.getTime() === today.getTime();
-      });
-
-      if (dailyBucket) {
-        dailyBucket.count += 1;
-      } else {
-        product.analytics.dailyViews.push({ date: today, count: 1 });
-      }
-
-      // Limit array size to last 10 elements to prevent infinite document bloat
-      if (product.analytics.dailyViews.length > 10) {
-        product.analytics.dailyViews.shift();
-      }
-
-      product.views = (product.views || 0) + 1;
-      await product.save();
-    }
+    // NOTE: view tracking moved to a dedicated endpoint POST /products/:id/view
+    // to make GET /products/:id strictly read-only and avoid accidental
+    // increments from re-renders, modal fetches or polling. See POST /products/:id/view below.
 
     // Populate owner info before returning response
     const populatedProduct = await Product.findById(product._id).populate("owner", "name email");
@@ -1596,5 +1567,85 @@ router.get("/products/:id/insights", verifyToken, async (req, res) => {
   }
 });
 
+
+// 4. Track/increment product views with deduplication (read/write separated from GET)
+router.post("/products/:id/view", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) return res.status(400).json({ msg: "Invalid product ID format." });
+
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ msg: "Product not found" });
+
+    // Try to extract requesterId from token if present
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    let viewerId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        viewerId = decoded.id;
+      } catch (err) {
+        // ignore invalid token, treat as guest
+      }
+    }
+
+    const { anonViewerId } = req.body || {};
+
+    // 1. Ignore owner views
+    if (viewerId && product.owner.toString() === viewerId.toString()) {
+      return res.json({ success: true, views: product.views, msg: "Owner view ignored" });
+    }
+
+    let isNewView = false;
+
+    if (viewerId) {
+      // Authenticated user: atomically add to viewedByUsers and increment views
+      const updated = await Product.findOneAndUpdate(
+        { _id: productId, viewedByUsers: { $ne: viewerId } },
+        { $addToSet: { viewedByUsers: viewerId }, $inc: { views: 1 } },
+        { new: true }
+      );
+      if (updated) isNewView = true;
+    } else if (anonViewerId) {
+      // Guest user
+      const updated = await Product.findOneAndUpdate(
+        { _id: productId, viewedByGuests: { $ne: anonViewerId } },
+        { $addToSet: { viewedByGuests: anonViewerId }, $inc: { views: 1 } },
+        { new: true }
+      );
+      if (updated) isNewView = true;
+    }
+
+    if (isNewView) {
+      // Increment today's analytics bucket
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      // Try atomic update of today's bucket
+      const bucketUpdated = await Product.updateOne(
+        { _id: productId, 'analytics.dailyViews.date': { $gte: new Date(today), $lt: new Date(today.getTime() + 24*60*60*1000) } },
+        { $inc: { 'analytics.dailyViews.$.count': 1 } }
+      );
+
+      if (bucketUpdated.matchedCount === 0) {
+        await Product.updateOne({ _id: productId }, { $push: { 'analytics.dailyViews': { date: today, count: 1 } } });
+        // Trim to last 10 entries if necessary
+        const prodAfter = await Product.findById(productId);
+        if (prodAfter.analytics && prodAfter.analytics.dailyViews && prodAfter.analytics.dailyViews.length > 10) {
+          prodAfter.analytics.dailyViews.shift();
+          await prodAfter.save();
+        }
+      }
+
+      const final = await Product.findById(productId);
+      return res.json({ success: true, views: final.views });
+    }
+
+    return res.json({ success: true, views: product.views });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
 
 export default router;

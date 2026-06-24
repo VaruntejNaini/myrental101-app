@@ -7,54 +7,89 @@ const addressSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+
     firstName: {
       type: String,
       required: true,
       trim: true,
     },
+
     lastName: {
       type: String,
       required: true,
       trim: true,
     },
+
     mobileNumber: {
       type: String,
       required: true,
       trim: true,
     },
+
     houseFlatNumber: {
       type: String,
       required: true,
       trim: true,
     },
+
     landmark: {
       type: String,
       default: "",
       trim: true,
     },
+
     fullAddress: {
       type: String,
       required: true,
       trim: true,
     },
+
+    locality: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    state: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    pincode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     addressType: {
       type: String,
       enum: ["Home", "Office", "College", "Hostel", "Other"],
       default: "Home",
     },
+
     latitude: {
       type: Number,
       required: true,
     },
+
     longitude: {
       type: Number,
       required: true,
     },
+
     addressDescription: {
       type: String,
       default: "",
       trim: true,
     },
+
     isDefault: {
       type: Boolean,
       default: false,

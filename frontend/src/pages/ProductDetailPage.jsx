@@ -80,6 +80,26 @@ export default function ProductDetailPage() {
     }
   }, [id]);
 
+  // Ensure a stable anon id for guest viewers so we can deduplicate guest views
+  const ensureAnonViewerId = () => {
+    let anon = localStorage.getItem("anon_viewer_id");
+    if (!anon) {
+      anon = "anon_" + Math.random().toString(36).slice(2, 12);
+      localStorage.setItem("anon_viewer_id", anon);
+    }
+    return anon;
+  };
+
+  // Record a view via dedicated endpoint once the product object is available
+  useEffect(() => {
+    if (!product) return;
+    const anonId = ensureAnonViewerId();
+    API.post(`/rent/products/${id}/view`, { anonViewerId: anonId }).catch(err => {
+      // Non-fatal: just log
+      console.debug("Failed to post product view:", err?.response?.data || err.message || err);
+    });
+  }, [product, id]);
+
   useEffect(() => {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
     if (token) {

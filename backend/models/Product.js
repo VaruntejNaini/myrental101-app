@@ -22,6 +22,10 @@ const productSchema = new mongoose.Schema(
     auctionEndTime: { type: Date, index: true },
     activeAuctionId: { type: mongoose.Schema.Types.ObjectId, ref: "Auction", default: null },
     views: { type: Number, default: 0 },
+    // Track which authenticated users and guest identifiers have already viewed
+    // so we can deduplicate and ensure each viewer counts once per product.
+    viewedByUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", default: [] }],
+    viewedByGuests: [{ type: String, default: [] }],
     analytics: {
       dailyViews: [
         {

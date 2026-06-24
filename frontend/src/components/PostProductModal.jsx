@@ -312,94 +312,99 @@ const isPublishDisabled =
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitAttempted(true);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitAttempted(true);
 
-    const hasErrors = Object.values(errors).some(Boolean);
-    if (hasErrors) {
-      // Find first invalid field in form order and focus it
-      if (errors.title) titleRef.current?.focus();
-      else if (errors.rentalPrice) priceRef.current?.focus();
-      else if (productType === "RENT" && errors.securityDeposit) depositRef.current?.focus();
-      else if (!isManualLocation && errors.address) {
-        addressContainerRef.current?.focus();
-        addressContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      else if (isManualLocation && errors.city) cityRef.current?.focus();
-      else if (isManualLocation && errors.area) areaRef.current?.focus();
-      else if (errors.description) descriptionRef.current?.focus();
-      return;
+  const hasErrors = Object.values(errors).some(Boolean);
+  if (hasErrors) {
+    // Find first invalid field in form order and focus it
+    if (errors.title) titleRef.current?.focus();
+    else if (errors.rentalPrice) priceRef.current?.focus();
+    else if (productType === "RENT" && errors.securityDeposit) depositRef.current?.focus();
+    else if (!isManualLocation && errors.address) {
+      addressContainerRef.current?.focus();
+      addressContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    else if (isManualLocation && errors.city) cityRef.current?.focus();
+    else if (isManualLocation && errors.area) areaRef.current?.focus();
+    else if (errors.description) descriptionRef.current?.focus();
+    return;
+  }
+
+  setIsSubmitting(true);
+  setError("");
+  setDuplicateError("");
+
+  try {
+    const formData = new FormData();
+    formData.append("title", title.trim());
+    formData.append("description", description.trim());
+    formData.append("category", category);
+    formData.append("rentalPrice", rentalPrice);
+    formData.append("securityDeposit", productType === "RENT" ? securityDeposit : 0);
+    formData.append("productType", productType);
+
+    const activeAddress = !isManualLocation && selectedAddressId
+      ? savedAddresses.find(a => a._id === selectedAddressId)
+      : null;
+
+    const submittedCity = activeAddress?.city || city;
+    const submittedArea = activeAddress?.locality || area;
+    const normalizedCity = (submittedCity || "").trim();
+    const normalizedArea = (submittedArea || "").trim();
+
+    formData.append("city", normalizedCity);
+    formData.append("area", normalizedArea);
+
+    if (activeAddress) {
+      formData.append("latitude", activeAddress.latitude);
+      formData.append("longitude", activeAddress.longitude);
     }
 
-    setIsSubmitting(true);
-    setError("");
+    selectedFiles.forEach((file) => {
+      formData.append("productImages", file);
+    });
+
+    await API.post("/rent/products", formData);
+
+    setIsSubmitting(false);
+
+    // Reset state and revoke URLs
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    setTitle("");
+    setRentalPrice("");
+    setSecurityDeposit("");
+    setArea("");
+    setDescription("");
+    setSelectedFiles([]);
+    setPreviewUrls([]);
     setDuplicateError("");
+    setTouched({
+      title: false,
+      city: false,
+      area: false,
+      description: false,
+      rentalPrice: false,
+      securityDeposit: false
+    });
+    setSubmitAttempted(false);
+    setSelectedAddressId(null);
+    setIsManualLocation(false);
+    setSavedAddresses([]);
 
-    try {
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("description", description.trim());
-      formData.append("category", category);
-      formData.append("rentalPrice", rentalPrice);
-      formData.append("securityDeposit", productType === "RENT" ? securityDeposit : 0);
-      formData.append("productType", productType);
-
-      const activeAddress = !isManualLocation && selectedAddressId
-        ? savedAddresses.find(a => a._id === selectedAddressId)
-        : null;
-
-      const submittedCity = activeAddress ? activeAddress.city : city;
-      const submittedArea = activeAddress ? activeAddress.locality : area;
-
-      formData.append("city", submittedCity.trim());
-      formData.append("area", submittedArea.trim());
-
-      if (activeAddress) {
-        formData.append("latitude", activeAddress.latitude);
-        formData.append("longitude", activeAddress.longitude);
-      }
-
-      selectedFiles.forEach((file) => {
-        formData.append("productImages", file);
-      });
-
-      console.log('>>> FRONTEND: Posting /api/rent/products, files:', selectedFiles.length, 'title:', title);
-      await API.post("/rent/products", formData);
-
-      setIsSubmitting(false);
-      
-      // Reset state and revoke URLs
-      previewUrls.forEach(url => URL.revokeObjectURL(url));
-      setTitle("");
-      setRentalPrice("");
-      setSecurityDeposit("");
-      setArea("");
-      setDescription("");
-      setSelectedFiles([]);
-      setPreviewUrls([]);
-      setDuplicateError("");
-      setTouched({
-        title: false,
-        city: false,
-        area: false,
-        description: false,
-        rentalPrice: false,
-        securityDeposit: false
-      });
-      setSubmitAttempted(false);
-      setSelectedAddressId(null);
-      setIsManualLocation(false);
-      setSavedAddresses([]);
-      
-      if (onProductCreated) onProductCreated();
-      onClose();
-    } catch (err) {
-      setIsSubmitting(false);
-      setError(err.response?.data?.msg || "Failed to post product listing.");
-    
+    if (onProductCreated) onProductCreated();
+    onClose();
+  } catch (err) {
+    console.error("Post product error:", err.response?.data || err);
+    setIsSubmitting(false);
+    setError(
+      err.response?.data?.msg ||
+      err.response?.data?.message ||
+      JSON.stringify(err.response?.data) ||
+      "Failed to post product listing."
+    );
   }
-  
 };
 
   return (

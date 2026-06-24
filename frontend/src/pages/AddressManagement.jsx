@@ -124,6 +124,25 @@ const sanitizeString = (val) => {
   return val.trim().replace(/\s+/g, " ");
 };
 
+// Extract locality and city from legacy `fullAddress` strings when explicit fields are missing.
+// Example formats: "FlatNo, Locality, City, State - Pincode" or "FlatNo, Locality, City"
+const extractLocalityCityFromFullAddress = (fullAddress) => {
+  if (!fullAddress || typeof fullAddress !== "string") return { locality: "", city: "" };
+  const parts = fullAddress.split(",").map(p => p.trim()).filter(Boolean);
+  const locality = parts[1] || "";
+  let city = "";
+  if (parts[2]) {
+    // parts[2] could contain "City" or "City - Pincode" or "City State"
+    city = parts[2].split("-")[0].trim();
+  } else if (parts[1]) {
+    // Fallback: sometimes fullAddress may be "Flat, Locality City - ..."
+    const maybe = parts[1].split("-")[0].trim();
+    // only accept fallback if it looks like a city (length > 2)
+    city = maybe.length > 2 ? maybe : "";
+  }
+  return { locality, city };
+};
+
 const validators = {
   firstName: validateFirstName,
   lastName: validateLastName,
@@ -594,6 +613,9 @@ export default function AddressManagement() {
 
   // Edit address trigger
   const handleEdit = (addr) => {
+    // For legacy addresses that may not have explicit `locality`/`city`,
+    // attempt to derive them from `fullAddress` so validation doesn't block editing.
+    const derived = extractLocalityCityFromFullAddress(addr.fullAddress);
     setFormData({
       firstName: addr.firstName,
       lastName: addr.lastName,
@@ -601,8 +623,8 @@ export default function AddressManagement() {
       houseFlatNumber: addr.houseFlatNumber,
       landmark: addr.landmark || "",
       pincode: addr.pincode || "",
-      locality: addr.locality || "",
-      city: addr.city || "",
+      locality: addr.locality || derived.locality || "",
+      city: addr.city || derived.city || "",
       state: addr.state || "",
       fullAddress: addr.fullAddress,
       addressType: addr.addressType || "Home",

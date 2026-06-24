@@ -5,7 +5,7 @@ import { logFailure } from "../services/auditService.js";
 export const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  console.log('>>> AUTH: verifyToken invoked. Authorization header present:', !!authHeader);
+  //console.log('>>> AUTH: verifyToken invoked. Authorization header present:', !!authHeader);
 
   if (!token) {
     console.log('>>> AUTH: No token present - blocking request.');
@@ -15,7 +15,7 @@ export const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.id;
-    console.log('>>> AUTH: Token verified. userId=', req.userId);
+    //console.log('>>> AUTH: Token verified. userId=', req.userId);
     next();
   } catch (err) {
     console.log('>>> AUTH: Token verification failed:', err.message);

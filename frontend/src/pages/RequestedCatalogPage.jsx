@@ -144,7 +144,7 @@ export default function RequestedCatalogPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [maxPrice, setMaxPrice] = useState(1000);
+  const [maxPrice, setMaxPrice] = useState(Infinity);
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
   const [notification, setNotification] = useState("");
   

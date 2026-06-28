@@ -156,7 +156,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   }, [chat.transactionId]);
 
   const resolvedProductTitle = txDetails?.product?.title || chat.productTitle || "Negotiation Chat";
-  const isOwner = txDetails?.owner?._id === currentUserId || txDetails?.owner === currentUserId;
+  const isOwner = String(txDetails?.owner?._id || txDetails?.owner) === String(currentUserId);
   const resolvedOtherUser = txDetails
     ? (isOwner ? txDetails.borrower : txDetails.owner)
     : chat.otherUser;
@@ -217,7 +217,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   useEffect(() => {
     if (isFocused && !chat.isMinimized && messages.length > 0) {
       const hasUnread = messages.some((msg) => {
-        const isMe = msg.sender === currentUserId || msg.sender?._id === currentUserId;
+        const isMe = String(msg.sender?._id || msg.sender) === String(currentUserId);
         return !isMe && !msg.readStatus;
       });
       if (hasUnread) {
@@ -243,7 +243,8 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
     const textToSend = inputMessage.trim();
-    if (!textToSend || !chat.transactionId || !resolvedOtherUser) return;
+  if (!textToSend || !chat.transactionId || !resolvedOtherUser?._id) return;
+
 
     // Optimistic message update
     const tempId = `optimistic_${Date.now()}`;
@@ -409,7 +410,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
 
             {/* Message Thread */}
             {messages.map((msg) => {
-              const isMe = msg.sender === currentUserId || msg.sender?._id === currentUserId;
+              const isMe = String(msg.sender?._id || msg.sender) === String(currentUserId);
 
               return (
                 <div
@@ -444,13 +445,13 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onFocus={onFocus}
-              disabled={txDetails?.status === "RETRACTED"}
-              placeholder={txDetails?.status === "RETRACTED" ? "Transaction is inactive" : "Type a message..."}
+              disabled={txDetails?.status === "RETRACTED" || !txDetails}
+              placeholder={!txDetails? "Loading chat...": txDetails?.status === "RETRACTED"? "Transaction is inactive": "Type a message..."}
               className="flex-1 bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 focus:border-indigo-500 focus-visible:ring-1 focus-visible:ring-indigo-500/30 outline-none rounded-2xl py-1.5 px-3.5 text-xs font-semibold text-slate-800 dark:text-white placeholder-[#9CA3AF] disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              disabled={txDetails?.status === "RETRACTED"}
+              disabled={txDetails?.status === "RETRACTED" || !resolvedOtherUser?._id}
               className="w-7 h-7 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full cursor-pointer transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               title="Send"
             >

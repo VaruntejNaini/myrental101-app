@@ -173,31 +173,39 @@ export default function ProductDetailPage() {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const handleNegotiateClick = async () => {
-    if (!product) return;
-    if (activeNegotiationStatus !== null) {
-      triggerToast("You already have an active negotiation for this product.");
+ const handleNegotiateClick = async () => {
+  if (!product) return;
+  if (activeNegotiationStatus !== null) {
+    triggerToast("You already have an active negotiation for this product.");
+    return;
+  }
+  const offer = window.prompt(`Enter your custom daily rate for "${product.title}" (Current: ₹${product.rentalPrice}/day):`);
+  if (!offer) return;
+  const numericOffer = parseFloat(offer);
+  if (isNaN(numericOffer) || numericOffer <= 0) {
+    triggerToast("Please enter a valid price.");
+    return;
+  }
+  try {
+    await API.post("/rent/negotiate", {
+      productId: id,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
+      dailyRate: numericOffer,
+      securityDeposit: product.securityDeposit
+    });
+    setActiveNegotiationStatus("PENDING_NEGOTIATION");
+    setIsNegotiationModalOpen(true);
+  } catch (err) {
+    if (err.response?.status === 409) {
+      alert("You already have an active negotiation for this product.");
+      setActiveNegotiationStatus("PENDING_NEGOTIATION");
       return;
     }
-    try {
-      await API.post("/rent/negotiate", {
-        productId: id,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
-        dailyRate: product.rentalPrice,
-        securityDeposit: product.securityDeposit
-      });
-      setActiveNegotiationStatus("PENDING_NEGOTIATION");
-      setIsNegotiationModalOpen(true);
-    } catch (err) {
-      if (err.response?.status === 409) {
-        alert("You already have an active negotiation for this product.");
-        setActiveNegotiationStatus("PENDING_NEGOTIATION");
-        return;
-      }
-      triggerToast(err.response?.data?.msg || "Negotiation request failed");
-    }
-  };
+    triggerToast(err.response?.data?.msg || "Negotiation request failed");
+  }
+};
+
 
   const handleSecondHandNegotiateClick = async () => {
     if (!product) return;

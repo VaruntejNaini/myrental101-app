@@ -12,8 +12,11 @@ const getImageUrl = (image) => {
   return image.url || "";
 };
 
-const ProductCard = React.memo(({ p, isNight, bookmarkedIds, handleBookmarkToggle, navigate, coordsLoading, coordsError, calculateDistance, userCoords, currentUser }) => {
-  const [imgIndex, setImgIndex] = useState(0);
+
+
+
+const ProductCard = React.memo(({ p, isNight, bookmarkedIds, handleBookmarkToggle, navigate, coordsLoading, coordsError, calculateDistance, userCoords, currentUser, userNegotiations, handleRentClick, handleNegotiationClick }) => {
+const [imgIndex, setImgIndex] = useState(0);
   const images = p.images?.length ? p.images : [];
 
   const handlePrev = (e) => {
@@ -278,15 +281,35 @@ const ProductCard = React.memo(({ p, isNight, bookmarkedIds, handleBookmarkToggl
             )}
           </div>
           {isVisuallyLocked ? (
-            <button 
-              disabled 
-              className="bg-slate-200 dark:bg-slate-800/80 text-slate-450 dark:text-slate-500 font-bold text-[10px] px-3.5 py-1.5 rounded-lg cursor-not-allowed opacity-60 text-center"
-            >
-              Temporarily Unavailable
-            </button>
-          ) : (
-            <button className="bg-indigo-500 hover:bg-indigo-650 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors">Rent</button>
-          )}
+  <button disabled className="bg-slate-200 dark:bg-slate-800/80 text-slate-450 dark:text-slate-500 font-bold text-[10px] px-3.5 py-1.5 rounded-lg cursor-not-allowed opacity-60 text-center">
+    Temporarily Unavailable
+  </button>
+) : isOwner ? (
+  <span className="text-[9px] font-extrabold text-indigo-400 bg-indigo-500/10 px-2 py-1.5 rounded-lg border border-indigo-500/25 text-center select-none w-20">
+    Your Listing
+  </span>
+) : (
+  <div className="flex flex-col gap-1 w-20">
+    <button
+      onClick={(e) => { e.stopPropagation(); handleRentClick(p._id, p.rentalPrice, p.securityDeposit); }}
+      className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer text-center"
+    >
+      Rent
+    </button>
+    {userNegotiations[p._id] ? (
+      <button disabled className="w-full bg-slate-700/60 text-slate-500 font-bold text-[9px] py-1.5 rounded-lg text-center cursor-not-allowed opacity-60">
+        ✓ Negotiation Sent
+      </button>
+    ) : (
+      <button
+        onClick={(e) => { e.stopPropagation(); handleNegotiationClick(p._id, p.rentalPrice, p.title); }}
+        className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer text-center"
+      >
+        Negotiate
+      </button>
+    )}
+  </div>
+)}
         </div>
       </div>
     </div>
@@ -323,6 +346,53 @@ export default function RentCatalogPage() {
     const val = searchParams.get("sort");
     return ALLOWED_SORTS.includes(val) ? val : "newest";
   });
+  const handleRentClick = async (productId, price, securityDeposit) => {
+  try {
+    await API.post("/rent/negotiate", {
+      productId,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      dailyRate: price,
+      securityDeposit: securityDeposit || 0
+    });
+    triggerToast("Rental request submitted!");
+    setTimeout(() => navigate(`/rent/checkout/${productId}`), 1500);
+  } catch (err) {
+    triggerToast(err.response?.data?.msg || "Rental request failed");
+  }
+};
+const handleNegotiationClick = async (productId, currentPrice, title) => {
+  if (userNegotiations[productId]) {
+    triggerToast("You already have an active negotiation for this product.");
+    return;
+  }
+  const offer = window.prompt(`Enter your custom daily rate for "${title}" (Current: ₹${currentPrice}/day):`);
+  if (!offer) return;
+  const numericOffer = parseFloat(offer);
+  if (isNaN(numericOffer) || numericOffer <= 0) {
+    triggerToast("Please enter a valid price.");
+    return;
+  }
+  try {
+    await API.post("/rent/negotiate", {
+      productId,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      dailyRate: numericOffer,
+      securityDeposit: 0
+    });
+    triggerToast(`Negotiation request of ₹${numericOffer}/day sent!`);
+    setUserNegotiations(prev => ({ ...prev, [productId]: "PENDING_NEGOTIATION" }));
+  } catch (err) {
+    if (err.response?.status === 409) {
+      alert("You already have an active negotiation for this product.");
+      setUserNegotiations(prev => ({ ...prev, [productId]: "PENDING_NEGOTIATION" }));
+      return;
+    }
+    triggerToast(err.response?.data?.msg || "Negotiation request failed");
+  }
+};
+
 
   // Server results
   const [products, setProducts] = useState([]);
@@ -330,6 +400,7 @@ export default function RentCatalogPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [userNegotiations, setUserNegotiations] = useState({});
 
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
   const [notification, setNotification] = useState("");
@@ -451,9 +522,23 @@ export default function RentCatalogPage() {
     if (activeToken) {
       API.get("/auth/me")
         .then((userRes) => {
-          setCurrentUser(userRes.data);
+          const user = userRes.data;
+          setCurrentUser(user);
+          return API.get("/rent/transactions").then((txRes) => {
+            const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
+            const negotiationsMap = {};
+            txRes.data.forEach((t) => {
+              const borrowerId = t.borrower?._id || t.borrower;
+              const prodId = t.product?._id || t.product;
+              if (activeStates.includes(t.status) && prodId && borrowerId &&
+                  String(borrowerId) === String(user._id)) {
+                negotiationsMap[String(prodId)] = t.status;
+              }
+            });
+            setUserNegotiations(negotiationsMap);
+          });
         })
-        .catch(err => console.error("Error synchronizing user session in RentCatalogPage:", err));
+        .catch((err) => console.error("Error synchronizing user session:", err));
     }
 
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
@@ -787,6 +872,9 @@ export default function RentCatalogPage() {
                     calculateDistance={calculateDistance}
                     userCoords={userCoords}
                     currentUser={currentUser}
+                    userNegotiations={userNegotiations}
+                    handleRentClick={handleRentClick}
+                    handleNegotiationClick={handleNegotiationClick}
                   />
                 ))}
               </div>

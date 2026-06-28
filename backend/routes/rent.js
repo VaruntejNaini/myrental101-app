@@ -1027,9 +1027,9 @@ router.get("/chat/:transactionId", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.transactionId);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    const isBorrower = transaction.borrower.toString() === req.userId;
-    const isOwner = transaction.owner.toString() === req.userId;
-    if (!isBorrower && !isOwner) {
+    const isBorrowerUser = transaction.borrower.toString() === req.userId;
+    const isOwnerUser = transaction.owner.toString() === req.userId;
+    if (!isBorrowerUser && !isOwnerUser) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -1082,9 +1082,9 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.transactionId);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    const isBorrower = transaction.borrower.toString() === req.userId;
-    const isOwner = transaction.owner.toString() === req.userId;
-    if (!isBorrower && !isOwner) {
+   const isSenderBorrower = transaction.borrower.toString() === req.userId;
+   const isSenderOwner = transaction.owner.toString() === req.userId;
+   if (!isSenderBorrower && !isSenderOwner) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

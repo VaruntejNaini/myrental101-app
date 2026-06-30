@@ -77,11 +77,10 @@ const auctionSchema = new mongoose.Schema(
 );
 
 // Optimistic Concurrency Control
-auctionSchema.pre('save', function (next) {
+auctionSchema.pre('save', async function () {
   if (!this.isNew && this.isModified('currentHighestBid')) {
     this.version += 1;
   }
-  next();
 });
 
 const Auction = mongoose.model("Auction", auctionSchema);

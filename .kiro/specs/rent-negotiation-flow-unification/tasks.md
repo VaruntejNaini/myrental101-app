@@ -6,7 +6,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
 
 ## Tasks
 
-- [-] 1. Write bug condition exploration tests (BEFORE implementing fix)
+- [x] 1. Write bug condition exploration tests (BEFORE implementing fix)
   - **Property 1: Bug Condition** - Rent Catalog Card Dead Button & Missing Negotiate Button / Detail Page No Prompt
   - **CRITICAL**: These tests MUST FAIL on unfixed code — failure confirms the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
@@ -24,7 +24,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
   - Mark task complete when tests are written, run, and failures are documented
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
   - **Property 2: Preservation** - Non-Bug-Condition Inputs Produce Unchanged Behavior
   - **IMPORTANT**: Follow observation-first methodology — observe UNFIXED code output first, then codify
   - Create `frontend/src/pages/__tests__/RentNegotiationFlow.preservation.test.jsx`
@@ -46,15 +46,15 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
   - Mark task complete when tests are written, run, and all pass on unfixed code
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-- [ ] 3. Implement the fix across 2 files (8 changes total)
+- [x] 3. Implement the fix across 2 files (8 changes total)
 
-  - [~] 3.1 RentCatalogPage — Change 1: Extend ProductCard component signature
+  - [x] 3.1 RentCatalogPage — Change 1: Extend ProductCard component signature
     - Add `userNegotiations`, `handleRentClick`, and `handleNegotiationClick` to the destructured props of the `ProductCard = React.memo(...)` component (line ~16)
     - New signature: `{ p, isNight, bookmarkedIds, handleBookmarkToggle, navigate, coordsLoading, coordsError, calculateDistance, userCoords, currentUser, userNegotiations, handleRentClick, handleNegotiationClick }`
     - _Bug_Condition: isBugCondition_CatalogCard(X) — X.page = "RentCatalogPage" AND NOT X.isVisuallyLocked AND NOT X.isOwner_
     - _Requirements: 2.1_
 
-  - [~] 3.2 RentCatalogPage — Change 2: Replace dead single Rent button with two-button layout
+  - [x] 3.2 RentCatalogPage — Change 2: Replace dead single Rent button with two-button layout
     - In `ProductCard`, locate the bottom-right action section (the `isVisuallyLocked` ternary that renders "Temporarily Unavailable")
     - Replace the dead `<button className="...">Rent</button>` branch with the full three-way layout mirroring `SecondHandCatalogPage.ProductCard`:
       - `isVisuallyLocked` → "Temporarily Unavailable" (unchanged)
@@ -65,7 +65,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
     - _Preservation: isVisuallyLocked → "Temporarily Unavailable" branch must be kept intact; card body onClick navigation must not be affected_
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.3, 3.4, 3.5_
 
-  - [~] 3.3 RentCatalogPage — Change 3: Add userNegotiations state declaration
+  - [x] 3.3 RentCatalogPage — Change 3: Add userNegotiations state declaration
     - In the `RentCatalogPage` function component, add alongside existing `useState` declarations:
       ```js
       const [userNegotiations, setUserNegotiations] = useState({});
@@ -73,13 +73,13 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
     - _Bug_Condition: isBugCondition_CatalogCard — parent has no userNegotiations state_
     - _Requirements: 2.4_
 
-  - [~] 3.4 RentCatalogPage — Change 4: Populate userNegotiations in session-loading useEffect
+  - [x] 3.4 RentCatalogPage — Change 4: Populate userNegotiations in session-loading useEffect
     - Inside the `activeToken` branch of the geolocation/session `useEffect`, replace the current `API.get("/auth/me").then(...)` block with the chained pattern from `SecondHandCatalogPage` that also calls `API.get("/rent/transactions")`, maps active transactions into a `negotiationsMap`, and calls `setUserNegotiations(negotiationsMap)`
     - Active states to include: `["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"]`
     - Only include transactions where `String(borrower._id) === String(user._id)`
     - _Requirements: 2.4_
 
-  - [~] 3.5 RentCatalogPage — Change 5: Add handleRentClick handler
+  - [x] 3.5 RentCatalogPage — Change 5: Add handleRentClick handler
     - Define `handleRentClick` as an async function in the `RentCatalogPage` component body (after state declarations, before return):
       ```js
       const handleRentClick = async (productId, price, securityDeposit) => { ... }
@@ -90,7 +90,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
     - _Expected_Behavior: POST /rent/negotiate at listed price with 3-day duration and securityDeposit, then navigate to checkout_
     - _Requirements: 2.2_
 
-  - [~] 3.6 RentCatalogPage — Change 6: Add handleNegotiationClick handler
+  - [x] 3.6 RentCatalogPage — Change 6: Add handleNegotiationClick handler
     - Define `handleNegotiationClick` as an async function in the `RentCatalogPage` component body:
       ```js
       const handleNegotiationClick = async (productId, currentPrice, title) => { ... }
@@ -106,7 +106,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
     - _Expected_Behavior: window.prompt shown, postedDailyRate = user_entered_value, button transitions to disabled "✓ Negotiation Sent"_
     - _Requirements: 2.3, 2.4_
 
-  - [~] 3.7 RentCatalogPage — Change 7: Pass new props to <ProductCard> in the render map
+  - [x] 3.7 RentCatalogPage — Change 7: Pass new props to <ProductCard> in the render map
     - Find the `products.map(...)` render section in `RentCatalogPage` JSX where `<ProductCard>` is instantiated
     - Add the three new props to each `<ProductCard>` invocation:
       ```jsx
@@ -116,7 +116,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
       ```
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [~] 3.8 ProductDetailPage — Change 8: Replace handleNegotiateClick with prompt-based pattern
+  - [x] 3.8 ProductDetailPage — Change 8: Replace handleNegotiateClick with prompt-based pattern
     - Replace the entire body of `handleNegotiateClick` (the function used by the RENT negotiate button) with the same pattern as `handleSecondHandNegotiateClick`:
       - Guard: `if (!product) return;`
       - Guard: `if (activeNegotiationStatus !== null)` → `triggerToast(...)` and return
@@ -135,19 +135,19 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
     - _Preservation: handleSecondHandNegotiateClick unchanged; handleAction (Rent Now) unchanged_
     - _Requirements: 2.5, 3.2, 3.6_
 
-- [~] 4. Verify bug condition exploration tests now pass
+- [ ] 4. Verify bug condition exploration tests now pass
   - **Property 1: Expected Behavior** - Rent Catalog Card Two-Button Layout & Detail Page Prompt
   - **IMPORTANT**: Re-run the SAME tests from task 1 — do NOT write new tests
   - The tests from task 1 encode the expected behavior; when they pass, it confirms the fix is correct
   - Run `npm run test` (or `npx vitest --run src/pages/__tests__/RentNegotiationFlow.bug.test.jsx`) from the `frontend/` directory
   - **EXPECTED OUTCOME**: All 4 tests (1a, 1b, 1c, 1d) now PASS
-    - Test 1a: `ProductCard` renders two buttons, both with onClick handlers ✓
+    - Test 1a: `ProductCard` renders two buttons, both with onClick handlers ✓  
     - Test 1b: PBT confirms for all random RENT products, two wired buttons are present ✓
     - Test 1c: `userNegotiations` state exists and "✓ Negotiation Sent" disabled state is reachable ✓
     - Test 1d: `window.prompt` IS called when "💬 Propose Custom Rate" is clicked on RENT detail page ✓
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [~] 5. Verify preservation tests still pass after fix
+- [ ] 5. Verify preservation tests still pass after fix
   - **Property 2: Preservation** - All Non-Bug-Condition Inputs Unchanged
   - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
   - Run `npm run test` (or `npx vitest --run src/pages/__tests__/RentNegotiationFlow.preservation.test.jsx`) from the `frontend/` directory
@@ -161,7 +161,7 @@ Implement the rent negotiation flow unification bugfix using the exploratory met
   - Confirm no regressions introduced by the fix
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-- [~] 6. Checkpoint — Run full test suite and confirm all tests pass
+- [ ] 6. Checkpoint — Run full test suite and confirm all tests pass
   - Run `npm run test` from the `frontend/` directory to execute the full test suite
   - Ensure all existing tests continue to pass (including `RequestedCatalogPage.bug.test.jsx` and `RequestedCatalogPage.preservation.test.jsx`)
   - Ensure the two new test files both pass: `RentNegotiationFlow.bug.test.jsx` and `RentNegotiationFlow.preservation.test.jsx`

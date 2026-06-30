@@ -479,13 +479,13 @@ export default function ProductDetailPage() {
                 ) : (
                   <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs">
                     <span className="font-extrabold text-orange-500">🔥 SURGE DEMAND AUCTION ACTIVE</span>
-                    <p className="text-slate-400 mt-1">Countdown: Ending soon. Top bid: <strong>₹{auction?.currentTopBid}</strong></p>
+                    <p className="text-slate-400 mt-1">Countdown: Ending soon. Top bid: <strong>₹{auction?.currentHighestBid}</strong></p>
                     <form onSubmit={handlePlaceBid} className="mt-3 flex gap-2">
                       <input
                         type="number"
                         value={bidAmount}
                         onChange={(e) => setBidAmount(e.target.value)}
-                        placeholder={`Bid > ₹${auction?.currentTopBid}`}
+                        placeholder={`Bid > ₹${auction?.currentHighestBid}`}
                         className={`flex-1 px-3 py-2 border rounded-xl focus:outline-none text-xs ${
                           isNight ? "bg-slate-950 border-slate-800 text-white" : "bg-white border-slate-200"
                         }`}

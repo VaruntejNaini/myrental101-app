@@ -14,6 +14,7 @@ import Review from "../models/Review.js";
 import User from "../models/User.js";
 import { awardReputation } from "../services/reputationService.js";
 import Bookmark from "../models/Bookmark.js";
+import Bid from "../models/Bid.js";
 
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
@@ -394,7 +395,7 @@ router.get("/products/:id", async (req, res) => {
     // Attach current active auction context if applicable
     let auction = null;
     if (populatedProduct.status === "AUCTION_ACTIVE") {
-      auction = await Auction.findOne({ product: populatedProduct._id, isResolved: false });
+      auction = await Auction.findOne({ product: populatedProduct._id, status: "ACTIVE" });
     }
     res.json({ product: populatedProduct, auction });
   } catch (err) {
@@ -664,10 +665,14 @@ router.post("/negotiate", verifyToken, async (req, res) => {
       const endsInHours = 3;
       await Auction.create([{
         product: product._id,
-        floorPrice: product.rentalPrice,
-        currentTopBid: dailyRate,
-        currentTopBidder: req.userId,
-        endsAt: new Date(Date.now() + endsInHours * 60 * 60 * 1000)
+        ownerId: product.owner,
+        type: product.productType === "RENT" ? "RENTAL" : "SECOND_HAND",
+        startingBid: product.rentalPrice,
+        reservePrice: product.rentalPrice,
+        currentHighestBid: dailyRate,
+        highestBidderId: req.userId,
+        endTime: new Date(Date.now() + endsInHours * 60 * 60 * 1000),
+        status: "ACTIVE"
       }], { session });
 
       await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`, req.userId, `/product/${product._id}`, null, session);
@@ -1130,28 +1135,42 @@ router.post("/auction/:productId/bid", verifyToken, async (req, res) => {
     session.startTransaction();
 
     const { amount, durationDays } = req.body;
-    const auction = await Auction.findOne({ product: req.params.productId, isResolved: false }).session(session);
+    const auction = await Auction.findOne({ product: req.params.productId, status: "ACTIVE" }).session(session);
     if (!auction) {
       await session.abortTransaction();
       return res.status(404).json({ msg: "No active micro-auction running on this listing" });
     }
 
-    if (new Date() > new Date(auction.endsAt)) {
+    if (new Date() > new Date(auction.endTime)) {
       await session.abortTransaction();
       return res.status(400).json({ msg: "Bidding window has expired!" });
     }
 
-    if (amount <= auction.currentTopBid) {
+    if (amount <= auction.currentHighestBid) {
       await session.abortTransaction();
       return res.status(400).json({ msg: "Bid amount must be higher than current top bid" });
     }
 
     // Set new bid details
-    auction.currentTopBid = amount;
-    const prevBidder = auction.currentTopBidder;
-    auction.currentTopBidder = req.userId;
-    auction.bids.push({ bidder: req.userId, amount, durationDays });
+    auction.currentHighestBid = amount;
+    const prevBidder = auction.highestBidderId;
+    auction.highestBidderId = req.userId;
     await auction.save({ session });
+
+    // Persist bid to Bid collection (required by new auction architecture)
+    // Idempotency key: prevents duplicate bids if the same user submits the same amount within the same second
+    const idempotencyKey = `${req.userId}_${auction._id}_${amount}_${Math.floor(Date.now() / 1000)}`;
+    const existingBid = await Bid.findOne({ idempotencyKey }).session(session);
+    if (!existingBid) {
+      await Bid.create([{
+        auctionId: auction._id,
+        bidderId: req.userId,
+        amount,
+        idempotencyKey,
+        ipAddress: req.ip || "",
+        status: "ACCEPTED"
+      }], { session });
+    }
 
     // Update current bid in product collection atomically
     await Product.findByIdAndUpdate(req.params.productId, { currentBid: amount }).session(session);

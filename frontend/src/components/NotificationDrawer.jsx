@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Bell, X, Activity, Mail, Phone } from "lucide-react";
 import API from "../api";
 
 export default function NotificationDrawer({ isOpen, onClose }) {
@@ -118,7 +119,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
         <div className="p-5 border-b border-gray-150 dark:border-zinc-800 flex justify-between items-center bg-gray-50 dark:bg-zinc-900/50">
           <div>
             <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-              🔔 Notifications
+              <Bell className="w-5 h-5 text-indigo-500" /> Notifications
               {notifications.length > 0 && (
                 <span className="text-xs bg-indigo-500 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
                   {notifications.length}
@@ -139,7 +140,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-white font-black text-lg p-2 rounded-xl border border-gray-200 dark:border-zinc-700 cursor-pointer"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -152,7 +153,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
             </div>
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400 dark:text-zinc-600 space-y-3">
-              <span className="text-5xl">🕊️</span>
+              <Activity className="w-12 h-12 text-slate-400 dark:text-zinc-650" />
               <p className="text-sm font-extrabold">All caught up!</p>
               <p className="text-xs text-center max-w-[200px] leading-relaxed text-slate-450">
                 Any negotiation offers, order requests, or updates will appear here.
@@ -172,6 +173,10 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 SYSTEM: "🔔",
                 OFFER_RETRACTED: "🚫",
               };
+
+              // Detect if this notification contains an OTP code
+              const otpMatch = notif.message.match(/(?:code|OTP|is):\s*(\d{6})/i);
+              const embeddedOtp = otpMatch ? otpMatch[1] : null;
               return (
                 <div
                   key={notif._id}
@@ -194,6 +199,16 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                   <p className="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-relaxed">
                     {notif.message}
                   </p>
+                  {/* OTP highlight block — only shown when the notification carries a 6-digit code */}
+                  {embeddedOtp && (
+                    <div className="mt-2 mb-1 flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-violet-500/10 border border-violet-500/20">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-violet-400">Your Verification Code</span>
+                      <span className="text-3xl font-black tracking-[0.35em] text-violet-300 select-all">
+                        {embeddedOtp}
+                      </span>
+                      <span className="text-[9px] text-violet-400/70">Show this to the other party · Expires in 10 min</span>
+                    </div>
+                  )}
                   {(() => {
                     const txMatch = notif.link ? notif.link.match(/tx=([^&#=]*)/) : null;
                     const txId = notif.transactionId || (txMatch ? txMatch[1] : null);
@@ -218,12 +233,12 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                             <div className="text-[10px] text-slate-100 flex flex-col gap-1 font-bold">
                               {notif.sender.email && (
                                 <span className="truncate flex items-center gap-1.5 text-slate-200">
-                                  ✉️ {notif.sender.email}
+                                  <Mail className="w-3 h-3 text-slate-350" /> {notif.sender.email}
                                 </span>
                               )}
                               {notif.sender.phone && (
                                 <span className="flex items-center gap-1.5 text-slate-200">
-                                  📞 {notif.sender.phone}
+                                  <Phone className="w-3 h-3 text-slate-350" /> {notif.sender.phone}
                                 </span>
                               )}
                             </div>

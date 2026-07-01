@@ -3,57 +3,51 @@ import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import Auction from '../models/Auction.js';
 import Bid from '../models/Bid.js';
-import { transitionState, AuctionStates } from '../services/auctionStateMachine.js';
+import { AuctionStates } from '../services/auctionStateMachine.js';
 import { scheduleAuctionEnd } from '../services/auctionSchedulerService.js';
 import { analyzeBidForFraud } from '../services/fraudDetectionService.js';
 import Product from '../models/Product.js';
+import { verifyToken } from '../middleware/auth.js';
+import { createAuction } from '../services/auctionService.js';
 
 const router = express.Router();
 
 const bidRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // Limit each IP to 10 requests per `window`
+  windowMs: 60 * 1000,
+  max: 10,
   message: 'Too many bids from this IP, please try again after a minute',
 });
 
-// Middleware to mock auth user (replace with actual auth middleware)
-const requireAuth = (req, res, next) => {
-  req.user = req.user || { _id: new mongoose.Types.ObjectId() };
-  next();
-};
-
-// 1. Create/Initiate Auction
-router.post('/initiate', requireAuth, async (req, res) => {
+// 1. Create/Initiate Auction — owner-initiated path
+router.post('/initiate', verifyToken, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { productId, startingBid, reservePrice, durationHours, type } = req.body;
-    
-    // Check Unique Active Auction Constraint
-    const product = await Product.findById(productId).session(session);
-    if (!product) throw new Error('Product not found');
-    if (product.activeAuctionId) throw new Error('Listing already has an active auction');
-    
-    const endTime = new Date(Date.now() + durationHours * 60 * 60 * 1000);
-    
-    const auction = new Auction({
-      product: productId,
-      ownerId: req.user._id,
-      type,
-      startingBid,
-      reservePrice,
-      durationHours,
-      endTime,
-      status: AuctionStates.ACTIVE
-    });
 
-    await auction.save({ session });
-    
-    product.activeAuctionId = auction._id;
-    await product.save({ session });
-    
-    // Schedule End
-    await scheduleAuctionEnd(auction._id, endTime);
+    // Validate input
+    if (!productId || !startingBid || !reservePrice || !durationHours || !type) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: 'productId, startingBid, reservePrice, durationHours, and type are required' });
+    }
+
+    // Ownership check — only the product owner can initiate an auction
+    const product = await Product.findById(productId).session(session);
+    if (!product) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    if (product.owner.toString() !== req.userId) {
+      await session.abortTransaction();
+      return res.status(403).json({ error: 'Only the product owner can initiate an auction' });
+    }
+
+    const io = req.app.get('io');
+    const auction = await createAuction(
+      { productId, ownerId: req.userId, type, startingBid, reservePrice, durationHours },
+      session,
+      io
+    );
 
     await session.commitTransaction();
     res.status(201).json(auction);
@@ -66,13 +60,18 @@ router.post('/initiate', requireAuth, async (req, res) => {
 });
 
 // 2. Place Bid (Idempotent, Transaction-safe, Concurrency-safe)
-router.post('/:id/bid', requireAuth, bidRateLimiter, async (req, res) => {
+router.post('/:id/bid', verifyToken, bidRateLimiter, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { amount, idempotencyKey } = req.body;
     const auctionId = req.params.id;
-    
+
+    if (!amount || !idempotencyKey) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: 'amount and idempotencyKey are required' });
+    }
+
     // Idempotency check
     const existingBid = await Bid.findOne({ idempotencyKey }).session(session);
     if (existingBid) {
@@ -84,22 +83,22 @@ router.post('/:id/bid', requireAuth, bidRateLimiter, async (req, res) => {
     if (!auction || auction.status !== AuctionStates.ACTIVE) {
       throw new Error('Auction is not active');
     }
-    
-    if (auction.ownerId.toString() === req.user._id.toString()) {
+
+    if (auction.ownerId.toString() === req.userId) {
       throw new Error('Owner cannot bid on their own auction');
     }
 
     if (amount < auction.currentHighestBid + auction.minimumIncrement) {
-      throw new Error(`Bid must be at least ${auction.currentHighestBid + auction.minimumIncrement}`);
+      throw new Error(`Bid must be at least ₹${auction.currentHighestBid + auction.minimumIncrement}`);
     }
 
     // Fraud check
-    const fraudScore = await analyzeBidForFraud({ ipAddress: req.ip, bidderId: req.user._id }, auctionId, session);
+    await analyzeBidForFraud({ ipAddress: req.ip, bidderId: req.userId }, auctionId, session);
 
     // Save bid
     const bid = new Bid({
       auctionId,
-      bidderId: req.user._id,
+      bidderId: req.userId,
       amount,
       idempotencyKey,
       ipAddress: req.ip
@@ -108,21 +107,28 @@ router.post('/:id/bid', requireAuth, bidRateLimiter, async (req, res) => {
 
     // Update Auction (Optimistic Concurrency handles the 'version' bump on save)
     auction.currentHighestBid = amount;
-    auction.highestBidderId = req.user._id;
+    auction.highestBidderId = req.userId;
 
-    // Anti-sniping
+    // Anti-sniping: extend by 2 min if bid arrives in last 2 min
+    let extended = false;
     const timeRemaining = auction.endTime - new Date();
-    if (timeRemaining < 2 * 60 * 1000) { // less than 2 mins
+    if (timeRemaining < 2 * 60 * 1000) {
       auction.endTime = new Date(auction.endTime.getTime() + 2 * 60 * 1000);
       await scheduleAuctionEnd(auction._id, auction.endTime);
+      extended = true;
     }
 
     await auction.save({ session }); // Will throw VersionError if stale write
-    
+
     await session.commitTransaction();
 
-    // Trigger socket broadcast (handled elsewhere or here via event emitter)
-    req.app.get('io').to(auctionId).emit('auction:update', auction);
+    // Broadcast to auction room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(auctionId).emit('auction:update', auction);
+      io.to(auctionId).emit('auction:new_bid', bid.toObject());
+      if (extended) io.to(auctionId).emit('auction:extended', { endTime: auction.endTime });
+    }
 
     res.status(201).json({ bid, auction });
   } catch (error) {

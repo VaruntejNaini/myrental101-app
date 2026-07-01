@@ -126,6 +126,12 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // CHECK BLOCKED
+
+    if (user.isBlocked) {
+      return res.status(403).json({ msg: "ACCOUNT_BLOCKED" });
+    }
+
     // CHECK EMAIL VERIFIED
 
     if (!user.isEmailVerified) {
@@ -525,6 +531,11 @@ router.post("/google", async (req, res) => {
       });
     }
 
+    // Block check — applies to both existing and newly registered Google users
+    if (user.isBlocked) {
+      return res.status(403).json({ msg: "ACCOUNT_BLOCKED" });
+    }
+
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -547,6 +558,9 @@ router.get("/me", verifyToken, async (req, res) => {
     const user = await User.findById(req.userId).select("-password");
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
+    }
+    if (user.isBlocked) {
+      return res.status(403).json({ msg: "ACCOUNT_BLOCKED" });
     }
     res.json(user);
   } catch (err) {

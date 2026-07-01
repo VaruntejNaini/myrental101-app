@@ -8,62 +8,12 @@ import { useAddressSync } from "../utils/addressSync";
 import NotificationBell from "../components/NotificationBell";
 import ChatBell from "../components/ChatBell";
 import Footer from "../components/Footer";
+import { AuctionCreationModal } from "../components/Auction/AuctionCreationModal";
+import { ShieldCheck, PackagePlus, MessageSquare, Lock } from "lucide-react";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
   <div className="absolute rounded-full pointer-events-none opacity-20 animate-float" style={style} />
-);
-
-// ── Modern Cartoon SVGs for How It Works ────────────────────────────────────
-const CartoonVerify = () => (
-  <svg viewBox="0 0 120 130" className="w-24 h-24 mx-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <ellipse cx="60" cy="115" rx="28" ry="6" fill="#e0e7ff" opacity="0.5"/>
-    <rect x="30" y="75" width="60" height="42" rx="8" fill="#6366f1"/>
-    <rect x="36" y="81" width="48" height="30" rx="5" fill="#818cf8"/>
-    <rect x="40" y="86" width="20" height="3" rx="2" fill="white" opacity="0.7"/>
-    <circle cx="75" cy="94" r="10" fill="#a5b4fc"/>
-    <circle cx="60" cy="44" r="22" fill="#fde68a"/>
-    <circle cx="52" cy="40" r="3" fill="#1e1b4b"/>
-    <circle cx="68" cy="40" r="3" fill="#1e1b4b"/>
-    <path d="M52 52 Q60 58 68 52" stroke="#1e1b4b" strokeWidth="2" strokeLinecap="round" fill="none"/>
-    <circle cx="88" cy="88" r="10" fill="#22c55e"/>
-    <text x="83" y="93" fontSize="12" fill="white" fontWeight="bold">✓</text>
-  </svg>
-);
-
-const CartoonPost = () => (
-  <svg viewBox="0 0 120 130" className="w-24 h-24 mx-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <ellipse cx="60" cy="118" rx="28" ry="5" fill="#d1fae5" opacity="0.5"/>
-    <rect x="25" y="55" width="70" height="60" rx="10" fill="#10b981"/>
-    <rect x="31" y="61" width="58" height="48" rx="7" fill="#34d399"/>
-    <circle cx="60" cy="35" r="20" fill="#bfdbfe"/>
-    <circle cx="52" cy="31" r="2.5" fill="#1e3a5f"/>
-    <circle cx="68" cy="31" r="2.5" fill="#1e3a5f"/>
-    <path d="M53 41 Q60 46 67 41" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-    <text x="76" y="56" fontSize="9" fill="white" fontWeight="bold" transform="rotate(15 76 56)">📦</text>
-  </svg>
-);
-
-const CartoonNegotiate = () => (
-  <svg viewBox="0 0 140 130" className="w-28 h-24 mx-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="38" cy="38" r="20" fill="#fca5a5"/>
-    <path d="M32 44 Q38 50 44 44" stroke="#7f1d1d" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-    <rect x="12" y="58" width="52" height="40" rx="9" fill="#ef4444"/>
-    <circle cx="102" cy="38" r="20" fill="#6ee7b7"/>
-    <rect x="76" y="58" width="52" height="40" rx="9" fill="#10b981"/>
-    <rect x="55" y="72" width="30" height="16" rx="8" fill="#f59e0b"/>
-    <text x="60" y="83" fontSize="9" fill="white" fontWeight="bold">DEAL!</text>
-  </svg>
-);
-
-const CartoonDeal = () => (
-  <svg viewBox="0 0 120 130" className="w-24 h-24 mx-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="60" cy="38" r="22" fill="#c4b5fd"/>
-    <path d="M51 45 Q60 54 69 45" stroke="#2e1065" strokeWidth="2" strokeLinecap="round" fill="none"/>
-    <rect x="28" y="60" width="64" height="50" rx="10" fill="#7c3aed"/>
-    <circle cx="82" cy="82" r="10" fill="#fbbf24"/>
-    <text x="78" y="86" fontSize="11" fill="white" fontWeight="bold">🤝</text>
-  </svg>
 );
 
 // ── Trust Badge ─────────────────────────────────────────────────────────────
@@ -73,15 +23,35 @@ const TrustBadge = ({ icon, label, isNight }) => (
   </div>
 );
 
-// ── How It Works Card ───────────────────────────────────────────────────────
-const HowCard = ({ cartoon, step, title, desc, color, isNight }) => (
-  <div className={`relative rounded-3xl p-6 shadow-lg border-2 ${color} hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 group ${isNight ? "bg-slate-900 text-white" : "bg-white text-slate-800"}`}>
-    <div className="absolute -top-4 -right-4 w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-black text-lg shadow-lg">
+// ── How It Works Card (Premium Lucide Icon Design) ──────────────────────────
+const HowCard = ({ icon: Icon, iconBg, iconColor, step, stepGradient, title, desc, isNight }) => (
+  <div className={`relative rounded-3xl p-7 border transition-all duration-300
+    hover:-translate-y-2 hover:shadow-2xl group cursor-default
+    ${isNight
+      ? "bg-slate-900/80 border-slate-800 backdrop-blur-sm"
+      : "bg-white border-slate-200 shadow-sm"
+    }`}
+  >
+    {/* Step number badge */}
+    <div className={`absolute -top-4 -right-4 w-9 h-9 rounded-full flex items-center
+      justify-center text-white font-black text-sm shadow-lg ${stepGradient}`}>
       {step}
     </div>
-    <div className="mb-4 group-hover:scale-105 transition-transform duration-300">{cartoon}</div>
-    <h3 className={`font-black text-lg mb-2 text-center ${isNight ? "text-slate-100" : "text-slate-800"}`}>{title}</h3>
-    <p className={`text-sm text-center leading-relaxed ${isNight ? "text-slate-400" : "text-slate-500"}`}>{desc}</p>
+
+    {/* Premium icon */}
+    <div className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center
+      shadow-md group-hover:scale-110 transition-transform duration-300 ${iconBg}`}>
+      <Icon className={`w-10 h-10 ${iconColor}`} strokeWidth={1.5} />
+    </div>
+
+    <h3 className={`font-black text-lg mb-2 text-center
+      ${isNight ? "text-white" : "text-slate-800"}`}>
+      {title}
+    </h3>
+    <p className={`text-sm text-center leading-relaxed
+      ${isNight ? "text-slate-400" : "text-slate-500"}`}>
+      {desc}
+    </p>
   </div>
 );
 
@@ -576,6 +546,8 @@ export default function Dashboard() {
   const [insightsData, setInsightsData] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState("");
+  const [auctionModalOpen, setAuctionModalOpen] = useState(false);
+  const [auctionSubmitting, setAuctionSubmitting] = useState(false);
 
   const handleOpenInsights = async (product) => {
     setInsightsProduct(product);
@@ -591,6 +563,29 @@ export default function Dashboard() {
       setInsightsError(err.response?.data?.msg || "Failed to load insights. Please try again.");
     } finally {
       setInsightsLoading(false);
+    }
+  };
+
+  const handleInitiateAuction = async ({ startingBid, reservePrice, durationHours, type }) => {
+    if (!insightsProduct) return;
+    setAuctionSubmitting(true);
+    try {
+      await API.post("/auctions/initiate", {
+        productId: insightsProduct.id || insightsProduct._id,
+        startingBid,
+        reservePrice,
+        durationHours,
+        type,
+      });
+      setAuctionModalOpen(false);
+      triggerToast("🔥 Auction started! Your listing is now live for bidding.");
+      // Refresh insights to reflect AUCTION_ACTIVE status
+      const res = await API.get(`/rent/products/${insightsProduct.id || insightsProduct._id}/insights`);
+      setInsightsData(res.data);
+    } catch (err) {
+      triggerToast(err.response?.data?.error || "Failed to start auction. Please try again.");
+    } finally {
+      setAuctionSubmitting(false);
     }
   };
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Varun Tej");
@@ -1555,10 +1550,10 @@ export default function Dashboard() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <HowCard step="1" cartoon={<CartoonVerify />} title="Verify Your Identity" desc="Upload your Aadhaar/PAN card. Our AI verifies you in 60 seconds — keeping the community safe and trusted." color="border-indigo-400/30 bg-indigo-950/50" isNight={isNight} />
-            <HowCard step="2" cartoon={<CartoonPost />} title="Post or Request Items" desc="List your idle items with photos & your price, or post a borrow request with your own price proposal." color="border-green-400/30 bg-green-950/50" isNight={isNight} />
-            <HowCard step="3" cartoon={<CartoonNegotiate />} title="Negotiate the Deal" desc="Chat directly with owners or borrowers. Counter-offer, discuss terms, and agree on a fair price in real-time." color="border-amber-400/30 bg-amber-950/50" isNight={isNight} />
-            <HowCard step="4" cartoon={<CartoonDeal />} title="Seal & Rent Securely" desc="Money held in escrow. Once both confirm, the deal is done. Rate each other and build your rental reputation!" color="border-violet-400/30 bg-violet-950/50" isNight={isNight} />
+            <HowCard step="1" icon={ShieldCheck} iconBg="bg-indigo-500/15 border border-indigo-500/30" iconColor="text-indigo-400" stepGradient="bg-gradient-to-br from-indigo-500 to-violet-500" title="Verify Your Identity" desc="Upload your Aadhaar/PAN card. Our AI verifies you in 60 seconds — keeping the community safe and trusted." isNight={isNight} />
+            <HowCard step="2" icon={PackagePlus} iconBg="bg-emerald-500/15 border border-emerald-500/30" iconColor="text-emerald-400" stepGradient="bg-gradient-to-br from-emerald-500 to-teal-500" title="Post or Request Items" desc="List your idle items with photos & your price, or post a borrow request with your own price proposal." isNight={isNight} />
+            <HowCard step="3" icon={MessageSquare} iconBg="bg-amber-500/15 border border-amber-500/30" iconColor="text-amber-400" stepGradient="bg-gradient-to-br from-amber-500 to-orange-500" title="Negotiate the Deal" desc="Chat directly with owners or borrowers. Counter-offer, discuss terms, and agree on a fair price in real-time." isNight={isNight} />
+            <HowCard step="4" icon={Lock} iconBg="bg-violet-500/15 border border-violet-500/30" iconColor="text-violet-400" stepGradient="bg-gradient-to-br from-violet-500 to-purple-600" title="Seal & Rent Securely" desc="Money held in escrow. Once both confirm, the deal is done. Rate each other and build your rental reputation!" isNight={isNight} />
           </div>
         </div>
       </section>
@@ -1883,6 +1878,16 @@ export default function Dashboard() {
                                 : `${insightsData.auctionThreshold - insightsData.requestsLast2Hours} more requests in the next 2 hours to trigger auto-escalation.`
                             }
                           </p>
+
+                          {/* Owner can manually start an auction when eligible and not already active */}
+                          {insightsData.auctionEligible && insightsData.status !== "AUCTION_ACTIVE" && (
+                            <button
+                              onClick={() => setAuctionModalOpen(true)}
+                              className="mt-3 w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer shadow-md shadow-orange-500/20"
+                            >
+                              🔥 Start Auction Now
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -2033,6 +2038,14 @@ export default function Dashboard() {
             syncProducts();
             triggerToast("Product listing published successfully! 🚀");
           }}
+        />
+
+        {/* Auction Creation Modal — triggered from Insights panel */}
+        <AuctionCreationModal
+          isOpen={auctionModalOpen}
+          onClose={() => setAuctionModalOpen(false)}
+          onSubmit={handleInitiateAuction}
+          isRental={insightsProduct?.productType === "RENT"}
         />
       </div>
       <Footer />

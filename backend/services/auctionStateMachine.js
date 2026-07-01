@@ -44,7 +44,7 @@ export const transitionState = async (auctionId, newState, userId = null, metada
     [AuctionStates.ENDED]: [AuctionStates.RESERVE_NOT_MET, AuctionStates.PAYMENT_PENDING],
     [AuctionStates.PAYMENT_PENDING]: [AuctionStates.PAYMENT_COMPLETED, AuctionStates.PAYMENT_FAILED, AuctionStates.PAYMENT_EXPIRED],
     [AuctionStates.PAYMENT_COMPLETED]: [AuctionStates.COMPLETED, AuctionStates.RENTAL_CONFIRMED, AuctionStates.PAYMENT_REFUNDED, AuctionStates.PAYMENT_DISPUTED],
-    // Add other states as needed
+    [AuctionStates.PAYMENT_EXPIRED]: [AuctionStates.CANCELLED],
   };
 
   const allowedNext = validTransitions[currentState] || [];

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Rocket, Handshake, UploadCloud, Plus, Edit2, Lock, X } from "lucide-react";
 import API from "../api";
 import { useAddressSync } from "../utils/addressSync";
 
@@ -417,15 +418,25 @@ const handleSubmit = async (e) => {
         {/* Close Button */}
         <button 
           onClick={handleClose} 
-          className="absolute top-4 right-4 text-xl font-bold hover:text-indigo-500 cursor-pointer z-10"
+          className="absolute top-4 right-4 text-xl font-bold hover:text-indigo-500 cursor-pointer z-10 p-1.5 rounded-lg border border-slate-205 dark:border-slate-800"
         >
-          ✕
+          <X className="w-4 h-4" />
         </button>
 
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6 pr-6">
           <div>
-            <h2 className="text-xl md:text-2xl font-black mb-1">
-              {productType === "RENT" ? "🚀 List Item for Rent" : "🤝 List Second-Hand Sale"}
+            <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
+              {productType === "RENT" ? (
+                <>
+                  <Rocket className="w-6 h-6 text-indigo-500" />
+                  <span>List Item for Rent</span>
+                </>
+              ) : (
+                <>
+                  <Handshake className="w-6 h-6 text-violet-500" />
+                  <span>List Second-Hand Sale</span>
+                </>
+              )}
             </h2>
             <p className="text-xs text-slate-450">List your gear for the community to browse</p>
           </div>
@@ -578,8 +589,10 @@ const handleSubmit = async (e) => {
 
           {/* Deposit Explanation banner */}
           {productType === "RENT" && showDepositInfo && (
-            <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-[11px] leading-relaxed text-indigo-300">
-              <span className="font-extrabold block mb-1">🔒 Why requires a security deposit?</span>
+            <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-[11px] leading-relaxed text-slate-300">
+              <span className="font-extrabold block mb-1 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5 text-indigo-400" /> Why requires a security deposit?
+              </span>
               A security deposit protects you (the owner) from potential loss, theft, late returns, or item damages. It is held securely in a neutral Escrow Vault during the active rental and fully returned to the renter once handoff & verification complete cleanly.
             </div>
           )}
@@ -619,7 +632,7 @@ const handleSubmit = async (e) => {
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                             isSelected 
                               ? "bg-emerald-500 text-white" 
-                              : isNight ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-600"
+                              : isNight ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-650"
                           }`}>
                             {addr.addressType || "Home"}
                           </span>
@@ -628,7 +641,7 @@ const handleSubmit = async (e) => {
                           )}
                         </div>
                         <p className="font-extrabold text-[10px] truncate">{addr.firstName} {addr.lastName}</p>
-                        <p className="text-[9px] text-slate-400 font-mono truncate">{addr.mobileNumber}</p>
+                        <p className="text-[9px] text-slate-450 font-mono truncate">{addr.mobileNumber}</p>
                         <p className="text-[10px] text-slate-450 leading-tight mt-1 line-clamp-2 h-[28px] overflow-hidden">
                           {addr.houseFlatNumber}, {addr.locality}, {addr.city}
                         </p>
@@ -645,7 +658,7 @@ const handleSubmit = async (e) => {
                         : "border-slate-300 bg-slate-50 text-slate-650 hover:border-indigo-600 hover:bg-slate-100 hover:text-indigo-600 shadow-sm hover:shadow"
                     }`}
                   >
-                    <span className="text-xl mb-1 select-none">➕</span>
+                    <Plus className="w-5 h-5 mb-1 text-slate-450" />
                     <span className="text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
                       Manage Addresses
                     </span>
@@ -664,9 +677,9 @@ const handleSubmit = async (e) => {
                       setCity("");
                       setArea("");
                     }}
-                    className="text-[10px] text-indigo-400 font-bold hover:underline cursor-pointer"
+                    className="text-[10px] text-indigo-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
                   >
-                    ✏️ Or enter listing location manually
+                    <Edit2 className="w-3 h-3" /> Or enter listing location manually
                   </button>
                 </div>
               </div>
@@ -842,9 +855,9 @@ const handleSubmit = async (e) => {
             }`}
           >
             {isSubmitting ? (
-              <span className="animate-pulse">📤 Uploading Images & Publishing...</span>
+              <span className="flex items-center gap-1.5 animate-pulse"><UploadCloud className="w-4 h-4 animate-bounce" /> Uploading Images & Publishing...</span>
             ) : (
-              <span>🚀 Publish Listing</span>
+              <span className="flex items-center gap-1.5"><Rocket className="w-4 h-4" /> Publish Listing</span>
             )}
           </button>
 

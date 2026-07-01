@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { MessageSquare, X, User } from "lucide-react";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
 
@@ -93,13 +94,13 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
         {/* Header */}
         <div className="p-5 border-b border-gray-150 dark:border-zinc-850 flex justify-between items-center bg-gray-50 dark:bg-zinc-900/50">
           <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-            💬 Messages
+            <MessageSquare className="w-5 h-5 text-indigo-500" /> Messages
           </h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-750 dark:text-zinc-400 dark:hover:text-white font-black text-lg p-2 rounded-xl border border-gray-200 dark:border-zinc-700 cursor-pointer w-9 h-9 flex items-center justify-center transition-colors"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -112,7 +113,7 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
             </div>
           ) : transactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400 dark:text-zinc-650 space-y-3">
-              <span className="text-5xl">💬</span>
+              <MessageSquare className="w-12 h-12 text-slate-400 dark:text-zinc-650" />
               <p className="text-sm font-extrabold text-slate-500">No active chats</p>
               <p className="text-xs text-center max-w-[240px] leading-relaxed text-slate-450">
                 Start a rental proposal or buyout request to initiate chat channels.
@@ -156,7 +157,7 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
                     {otherUser.profilePic ? (
                       <img src={otherUser.profilePic} alt={otherUser.name} className="w-full h-full object-cover" />
                     ) : (
-                      otherUser.name ? otherUser.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "👤"
+                      otherUser.name ? otherUser.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : <User className="w-5 h-5" />
                     )}
                   </div>
 

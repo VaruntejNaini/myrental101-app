@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Scale, ClipboardList, BarChart3, Users, CheckCircle, ArrowLeft, Package, RefreshCw, AlertTriangle } from "lucide-react";
 import API from "../api";
 
 const TABS = [
-  { id: "disputes", label: "Disputes", icon: "⚖️" },
-  { id: "audit", label: "Audit Logs", icon: "📋" },
-  { id: "metrics", label: "System Metrics", icon: "📊" },
-  { id: "users", label: "Users", icon: "👥" },
+  { id: "disputes", label: "Disputes", icon: <Scale className="w-4 h-4" /> },
+  { id: "audit", label: "Audit Logs", icon: <ClipboardList className="w-4 h-4" /> },
+  { id: "metrics", label: "System Metrics", icon: <BarChart3 className="w-4 h-4" /> },
+  { id: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
 ];
 
 function SkeletonCard() {
@@ -399,11 +400,11 @@ function MetricsTab() {
   if (error) return <ErrorBanner message={error} onRetry={loadMetrics} />;
 
   const cards = [
-    { label: "Total Users", value: metrics.totalUsers, icon: "👥", color: "text-indigo-400" },
-    { label: "Active Listings", value: metrics.activeListings, icon: "📦", color: "text-emerald-400" },
-    { label: "Active Rentals", value: metrics.activeRentals, icon: "🔄", color: "text-amber-400" },
-    { label: "Settled Rentals", value: metrics.settledRentals, icon: "✅", color: "text-blue-400" },
-    { label: "Disputed Transactions", value: metrics.disputedTransactions, icon: "⚠️", color: "text-red-400" },
+    { label: "Total Users", value: metrics.totalUsers, icon: <Users className="w-6 h-6 text-indigo-400" />, color: "text-indigo-400" },
+    { label: "Active Listings", value: metrics.activeListings, icon: <Package className="w-6 h-6 text-emerald-400" />, color: "text-emerald-400" },
+    { label: "Active Rentals", value: metrics.activeRentals, icon: <RefreshCw className="w-6 h-6 text-amber-400" />, color: "text-amber-400" },
+    { label: "Settled Rentals", value: metrics.settledRentals, icon: <CheckCircle className="w-6 h-6 text-blue-400" />, color: "text-blue-400" },
+    { label: "Disputed Transactions", value: metrics.disputedTransactions, icon: <AlertTriangle className="w-6 h-6 text-red-400" />, color: "text-red-400" },
   ];
 
   return (
@@ -428,6 +429,8 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+  const [blockingId, setBlockingId] = useState(null);
+  const [actionMsg, setActionMsg] = useState("");
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -449,6 +452,34 @@ function UsersTab() {
     loadUsers();
   }, [loadUsers]);
 
+  // Auto-clear action message after 3 seconds
+  useEffect(() => {
+    if (!actionMsg) return;
+    const t = setTimeout(() => setActionMsg(""), 3000);
+    return () => clearTimeout(t);
+  }, [actionMsg]);
+
+  const handleToggleBlock = async (user) => {
+    setBlockingId(user._id);
+    try {
+      const endpoint = user.isBlocked
+        ? `/admin/users/${user._id}/unblock`
+        : `/admin/users/${user._id}/block`;
+      const res = await API.post(endpoint);
+      setActionMsg(res.data.msg);
+      // Optimistically update local state
+      setUsers((prev) =>
+        prev.map((u) =>
+          u._id === user._id ? { ...u, isBlocked: !user.isBlocked } : u
+        )
+      );
+    } catch (err) {
+      setActionMsg(err.response?.data?.msg || "Action failed.");
+    } finally {
+      setBlockingId(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex gap-3 mb-6">
@@ -463,6 +494,13 @@ function UsersTab() {
           Search
         </button>
       </div>
+
+      {/* Inline action feedback toast */}
+      {actionMsg && (
+        <div className="mb-4 px-4 py-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-bold">
+          {actionMsg}
+        </div>
+      )}
 
       {error && <ErrorBanner message={error} onRetry={loadUsers} />}
 
@@ -485,12 +523,22 @@ function UsersTab() {
                   <th className="text-left px-4 py-3 font-black">Role</th>
                   <th className="text-left px-4 py-3 font-black">Reputation</th>
                   <th className="text-left px-4 py-3 font-black">Registered</th>
+                  <th className="text-left px-4 py-3 font-black">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user._id} className="border-t border-slate-800/60 hover:bg-slate-900/40">
-                    <td className="px-4 py-3 text-white font-bold">{user.name}</td>
+                  <tr key={user._id} className={`border-t border-slate-800/60 hover:bg-slate-900/40 transition-colors ${user.isBlocked ? "opacity-60" : ""}`}>
+                    <td className="px-4 py-3 text-white font-bold">
+                      <div className="flex items-center gap-2">
+                        {user.name}
+                        {user.isBlocked && (
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/20">
+                            Blocked
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-slate-400">{user.email}</td>
                     <td className="px-4 py-3">
                       <span
@@ -505,6 +553,25 @@ function UsersTab() {
                     </td>
                     <td className="px-4 py-3 text-emerald-400 font-bold">{user.reputationScore ?? 100}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{new Date(user.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      {user.role !== "ADMIN" && (
+                        <button
+                          onClick={() => handleToggleBlock(user)}
+                          disabled={blockingId === user._id}
+                          className={`text-[11px] font-black uppercase px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                            user.isBlocked
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+                              : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20"
+                          }`}
+                        >
+                          {blockingId === user._id
+                            ? "..."
+                            : user.isBlocked
+                            ? "🔓 Unblock"
+                            : "🚫 Block"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

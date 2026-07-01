@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Sun, Moon, Download, Truck, ShoppingBag, Folder, Camera, Trash2, X, Bell } from "lucide-react";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
 
@@ -46,20 +47,72 @@ export default function Profile() {
           if (res.data?.role) {
             setUserRole(res.data.role);
           }
+          if (res.data?._id) {
+            setCurrentUserId(res.data._id);
+          }
         })
         .catch(err => console.error("Error loading profile:", err));
     }
   }, []);
 
-  const [expandedRental, setExpandedRental] = useState(null);
-  const [expandedLending, setExpandedLending] = useState(null);
-  const [expandedHistory, setExpandedHistory] = useState(null);
-  const [showAdjustModal, setShowAdjustModal] = useState(false);
-  const [adjustType, setAdjustType] = useState("extend"); // "extend" or "shrink"
-  const [adjustRental, setAdjustRental] = useState(null);
-  const [adjustDays, setAdjustDays] = useState(1);
-  const [adjustReason, setAdjustReason] = useState("");
-  const [showNotification, setShowNotification] = useState(""); // custom Toast popup
+  const [expandedCard, setExpandedCard] = useState(null);
+  const [showNotification, setShowNotification] = useState("");
+
+  // Real transaction data
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [rentingItems, setRentingItems] = useState([]);   // user is borrower
+  const [lendingItems, setLendingItems] = useState([]);   // user is owner
+  const [txLoading, setTxLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) { setTxLoading(false); return; }
+    let uid = null;
+    try { uid = JSON.parse(atob(token.split(".")[1])).id; } catch {}
+    API.get("/rent/transactions")
+      .then(res => {
+        if (!res.data?.length) { setTxLoading(false); return; }
+        const mapped = res.data.map(tx => ({
+          _id: tx._id,
+          title: tx.product?.title || "Deleted Listing",
+          productType: tx.product?.productType || "RENT",
+          dailyRate: tx.dailyRate,
+          totalPaid: tx.totalPaid,
+          status: tx.status,
+          startDate: tx.startDate,
+          endDate: tx.endDate,
+          borrower: tx.borrower,
+          owner: tx.owner,
+          securityDeposit: tx.securityDeposit,
+        }));
+        setRentingItems(mapped.filter(tx => tx.borrower?._id?.toString() === uid || tx.borrower?.toString() === uid));
+        setLendingItems(mapped.filter(tx => tx.owner?._id?.toString() === uid || tx.owner?.toString() === uid));
+        setTxLoading(false);
+      })
+      .catch(() => setTxLoading(false));
+  }, []);
+
+  const calcProgress = (s, e) => {
+    const start = new Date(s).getTime(), end = new Date(e).getTime(), now = Date.now();
+    if (now <= start) return 0; if (now >= end) return 100;
+    return Math.round(((now - start) / (end - start)) * 100);
+  };
+
+  const STATUS_BADGE = {
+    RESERVED: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    IN_POSSESSION: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    RETURN_INITIATED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    DAMAGE_REVIEW: "bg-red-500/10 text-red-400 border-red-500/20",
+    DISPUTED: "bg-red-600/10 text-red-500 border-red-600/20",
+    SETTLED: "bg-emerald-600/10 text-emerald-500 border-emerald-600/20",
+    NEGOTIATION_DECLINED: "bg-slate-700/30 text-slate-500 border-slate-700/20",
+    RETRACTED: "bg-red-500/10 text-red-400 border-red-500/20",
+    AWAITING_PAYMENT: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    PENDING_NEGOTIATION: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  };
+
+  const ACTIVE = new Set(["RESERVED","IN_POSSESSION","RETURN_INITIATED","DAMAGE_REVIEW","DISPUTED"]);
+  const HISTORY = new Set(["SETTLED","NEGOTIATION_DECLINED","RETRACTED"]);
   const [prefCity, setPrefCity] = useState("Hyderabad");
   const [prefRadius, setPrefRadius] = useState(15);
   const [prefWhatsApp, setPrefWhatsApp] = useState(true);
@@ -325,235 +378,118 @@ export default function Profile() {
 
         {/* ACTIVE RENTALS PANEL */}
         <div className={`mt-8 p-8 rounded-3xl border transition-all ${isNight ? "bg-slate-900/60 border-slate-800 text-white" : "bg-white border-indigo-50 text-slate-800"}`}>
-          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400">📥 Active Rentals Period</h3>
-          <p className="text-xs text-slate-500 mb-6">Status of products in your possession. Click a card to toggle its possession timeline.</p>
-          
-          <div className="space-y-4">
-            {[
-              { id: "rent-1", title: "Canon EOS R50 Camera", timeRemaining: "1 day 12 hours remaining", progress: 75, price: "₹450/day", startDate: "12 May 2026", endDate: "30 May 2026" },
-              { id: "rent-2", title: "Honda Activa Scooter", timeRemaining: "4 days 2 hours remaining", progress: 40, price: "₹250/day", startDate: "18 May 2026", endDate: "05 June 2026" }
-            ].map((rent) => {
-              const isExpanded = expandedRental === rent.id;
-              return (
-                <div 
-                  key={rent.id} 
-                  onClick={() => setExpandedRental(isExpanded ? null : rent.id)}
-                  className={`p-5 rounded-2xl border transition-all duration-200 cursor-pointer hover:border-indigo-500/50 ${isNight ? "bg-slate-950 border-slate-850" : "bg-indigo-50/30 border-indigo-100/50"}`}
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <h4 className="font-extrabold text-sm text-indigo-400 mb-1 flex items-center gap-2">
-                        {rent.title}
-                        <span className="text-[10px] font-normal text-slate-500">• Click to toggle timeline</span>
-                      </h4>
-                      <p className="text-xs text-slate-400">Cost: {rent.price} • {rent.timeRemaining}</p>
-                    </div>
-                    <span className={`text-xs font-bold transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
+          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400"><Download className="w-5 h-5 inline mr-2" /> Active Rentals</h3>
+          <p className="text-xs text-slate-500 mb-6">Products you are currently renting from others.</p>
+          {txLoading ? (<div className="space-y-3">{[1,2].map(i=><div key={i} className="h-16 rounded-2xl bg-slate-800/40 animate-pulse"/>)}</div>)
+          : rentingItems.filter(tx=>ACTIVE.has(tx.status)).length===0 ? (<p className="text-sm text-slate-500">No active rentals right now.</p>)
+          : (<div className="space-y-4">{rentingItems.filter(tx=>ACTIVE.has(tx.status)).map(tx=>{
+            const open=expandedCard===tx._id, prog=calcProgress(tx.startDate,tx.endDate);
+            return (<div key={tx._id} onClick={()=>setExpandedCard(open?null:tx._id)} className={`p-5 rounded-2xl border cursor-pointer hover:border-indigo-500/50 transition-all ${isNight?"bg-slate-950 border-slate-800":"bg-indigo-50/30 border-indigo-100/50"}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h4 className="font-extrabold text-sm text-indigo-400">{tx.title}</h4>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${STATUS_BADGE[tx.status]||"bg-slate-700/20 text-slate-400"}`}>{tx.status}</span>
                   </div>
-
-                  {isExpanded && (
-                    <div className="mt-6 pt-6 border-t border-slate-800/10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
-                        <span>Initial: {rent.startDate}</span>
-                        <span>Final: {rent.endDate}</span>
-                      </div>
-                      
-                      <div className="relative w-full h-1 bg-slate-800 rounded-full my-6 flex items-center">
-                        <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full" style={{ width: `${rent.progress}%` }}></div>
-                        <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"></div>
-                        <div 
-                          className="absolute w-4 h-4 rounded-full bg-indigo-500 border-2 border-white -translate-x-1/2 cursor-pointer group/dot flex items-center justify-center transition-all hover:scale-125 shadow-md"
-                          style={{ left: `${rent.progress}%` }}
-                        >
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setShowNotification("Return request successfully sent to the product owner!"); }}
-                            className="absolute bottom-6 opacity-0 group-hover/dot:opacity-100 transition-opacity duration-200 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap z-30"
-                          >
-                            Initiate Return
-                          </button>
-                        </div>
-
-                        <div 
-                          className="absolute right-0 w-3 h-3 rounded-full bg-slate-500 translate-x-1/2 cursor-pointer group/end flex items-center justify-center transition-all hover:bg-violet-500 shadow-sm"
-                        >
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setAdjustRental(rent); setAdjustDays(1); setAdjustReason(""); setAdjustType("extend"); setShowAdjustModal(true); }}
-                            className="absolute bottom-6 opacity-0 group-hover/end:opacity-100 transition-opacity duration-200 bg-violet-600 hover:bg-violet-750 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap z-30"
-                          >
-                            Extend / Shrink
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-slate-400">Rs.{tx.dailyRate}/day &bull; Owner: {tx.owner?.name||"—"} &bull; {new Date(tx.startDate).toLocaleDateString([],{month:"short",day:"numeric"})} to {new Date(tx.endDate).toLocaleDateString([],{month:"short",day:"numeric"})}</p>
                 </div>
-              );
-            })}
-          </div>
+                <span className={`text-xs font-bold transition-transform ${open?"rotate-180":""}`}>&#9660;</span>
+              </div>
+              {open&&(<div className="mt-6 pt-6 border-t border-slate-800/10" onClick={e=>e.stopPropagation()}>
+                <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                  <span>{new Date(tx.startDate).toLocaleDateString()}</span><span>{new Date(tx.endDate).toLocaleDateString()}</span>
+                </div>
+                <div className="relative w-full h-1 bg-slate-800 rounded-full my-6 flex items-center">
+                  <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full" style={{width:`${prog}%`}}/>
+                  <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"/>
+                  <div className="absolute w-4 h-4 rounded-full bg-indigo-500 border-2 border-white -translate-x-1/2 shadow-md" style={{left:`${prog}%`}}/>
+                  <div className="absolute right-0 w-2.5 h-2.5 rounded-full bg-slate-600 translate-x-1/2"/>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-slate-400">Total paid: <span className="font-black text-emerald-400">Rs.{tx.totalPaid?.toLocaleString()}</span></p>
+                  <button onClick={()=>navigate("/orders")} className="text-[10px] font-black text-indigo-400 hover:text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/5">Go to Orders</button>
+                </div>
+              </div>)}
+            </div>);
+          })}</div>)}
         </div>
 
         {/* ACTIVE LENDING TRACKERS */}
         <div className={`mt-8 p-8 rounded-3xl border transition-all ${isNight ? "bg-slate-900/60 border-slate-800 text-white" : "bg-white border-indigo-50 text-slate-800"}`}>
-          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400">🚚 Active Lending Trackers</h3>
-          <p className="text-xs text-slate-500 mb-6">Status of your personal assets currently leased to verified community members.</p>
-          
-          <div className="space-y-4">
-            {[
-              { id: "lend-1", title: "MacBook Pro 14\" M3 Max", price: "₹800/day", renter: "Rohit S. (99/100 Trust)", progress: 55, startDate: "15 May 2026", endDate: "02 June 2026" }
-            ].map((lend) => {
-              const isExpanded = expandedLending === lend.id;
-              return (
-                <div 
-                  key={lend.id}
-                  onClick={() => setExpandedLending(isExpanded ? null : lend.id)}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer hover:border-indigo-500/50 ${isNight ? "bg-slate-950 border-slate-850" : "bg-white border-slate-100"}`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="font-extrabold text-sm text-indigo-400 mb-1">{lend.title}</h4>
-                      <p className="text-xs text-slate-400">Leased to: {lend.renter} • Rate: {lend.price}</p>
-                    </div>
-                    <span className={`text-xs font-bold transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
+          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400"><Truck className="w-5 h-5 inline mr-2" /> Active Lending</h3>
+          <p className="text-xs text-slate-500 mb-6">Your listings currently rented out to others.</p>
+          {txLoading ? (<div className="space-y-3">{[1,2].map(i=><div key={i} className="h-16 rounded-2xl bg-slate-800/40 animate-pulse"/>)}</div>)
+          : lendingItems.filter(tx=>ACTIVE.has(tx.status)).length===0 ? (<p className="text-sm text-slate-500">No active lending right now.</p>)
+          : (<div className="space-y-4">{lendingItems.filter(tx=>ACTIVE.has(tx.status)).map(tx=>{
+            const open=expandedCard===tx._id+"-l", prog=calcProgress(tx.startDate,tx.endDate);
+            return (<div key={tx._id+"-l"} onClick={()=>setExpandedCard(open?null:tx._id+"-l")} className={`p-5 rounded-2xl border cursor-pointer hover:border-indigo-500/50 transition-all ${isNight?"bg-slate-950 border-slate-800":"bg-white border-slate-100"}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h4 className="font-extrabold text-sm text-indigo-400">{tx.title}</h4>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${STATUS_BADGE[tx.status]||"bg-slate-700/20 text-slate-400"}`}>{tx.status}</span>
                   </div>
-
-                  {isExpanded && (
-                    <div className="mt-6 pt-6 border-t border-slate-800/10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
-                        <span>Initial Date: {lend.startDate}</span>
-                        <span>Final Date: {lend.endDate}</span>
-                      </div>
-                      <div className="relative w-full h-1 bg-slate-800 rounded-full my-4 flex items-center">
-                        <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full" style={{ width: `${lend.progress}%` }}></div>
-                        <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"></div>
-                        <div className="absolute w-4 h-4 rounded-full bg-violet-500 border-2 border-white -translate-x-1/2 shadow-md" style={{ left: `${lend.progress}%` }}></div>
-                        <div className="absolute right-0 w-2.5 h-2.5 rounded-full bg-slate-600 translate-x-1/2"></div>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-slate-400">Rs.{tx.dailyRate}/day &bull; Borrower: {tx.borrower?.name||"—"} &bull; {new Date(tx.startDate).toLocaleDateString([],{month:"short",day:"numeric"})} to {new Date(tx.endDate).toLocaleDateString([],{month:"short",day:"numeric"})}</p>
                 </div>
-              );
-            })}
-          </div>
+                <span className={`text-xs font-bold transition-transform ${open?"rotate-180":""}`}>&#9660;</span>
+              </div>
+              {open&&(<div className="mt-6 pt-6 border-t border-slate-800/10" onClick={e=>e.stopPropagation()}>
+                <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                  <span>{new Date(tx.startDate).toLocaleDateString()}</span><span>{new Date(tx.endDate).toLocaleDateString()}</span>
+                </div>
+                <div className="relative w-full h-1 bg-slate-800 rounded-full my-4 flex items-center">
+                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full" style={{width:`${prog}%`}}/>
+                  <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"/>
+                  <div className="absolute w-4 h-4 rounded-full bg-violet-500 border-2 border-white -translate-x-1/2 shadow-md" style={{left:`${prog}%`}}/>
+                  <div className="absolute right-0 w-2.5 h-2.5 rounded-full bg-slate-600 translate-x-1/2"/>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-slate-400">Security held: <span className="font-black text-emerald-400">Rs.{tx.securityDeposit?.toLocaleString()}</span></p>
+                  <button onClick={()=>navigate("/orders")} className="text-[10px] font-black text-violet-400 hover:text-violet-300 px-3 py-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5">Go to Orders</button>
+                </div>
+              </div>)}
+            </div>);
+          })}</div>)}
         </div>
 
         {/* ORDER HISTORY */}
         <div className={`mt-8 p-8 rounded-3xl border transition-all ${isNight ? "bg-slate-900/60 border-slate-800 text-white" : "bg-white border-indigo-50 text-slate-800"}`}>
-          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400">🛍️ Order History</h3>
-          <p className="text-xs text-slate-500 mb-6">Tracking status for products you purchased outright.</p>
-          
-          <div className="space-y-4">
-            {[
-              { id: "ord-1", title: "DJI Mavic Air 2 Drone", price: "₹45,000", status: "Delivered", progress: 100, startDate: "Ordered: 10 May", endDate: "Delivered: 15 May" },
-              { id: "ord-2", title: "Fender Stratocaster Guitar", price: "₹18,500", status: "In Transit", progress: 60, startDate: "Ordered: 24 May", endDate: "Arriving: 31 May" }
-            ].map((order) => {
-              const isExpanded = expandedHistory === order.id;
-              return (
-                <div 
-                  key={order.id}
-                  onClick={() => setExpandedHistory(isExpanded ? null : order.id)}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer hover:border-indigo-500/50 ${isNight ? "bg-slate-950 border-slate-850" : "bg-white border-slate-100"}`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="font-extrabold text-sm text-indigo-400 mb-1">{order.title}</h4>
-                      <p className="text-xs text-slate-400">Paid: {order.price} • Status: <span className={order.status === "Delivered" ? "text-emerald-400" : "text-amber-400"}>{order.status}</span></p>
+          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400"><ShoppingBag className="w-5 h-5 inline mr-2" /> Transaction History</h3>
+          <p className="text-xs text-slate-500 mb-6">All completed, declined, and closed transactions.</p>
+          {txLoading ? (<div className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-14 rounded-2xl bg-slate-800/40 animate-pulse"/>)}</div>)
+          : (()=>{
+            const hist=[...rentingItems.filter(tx=>HISTORY.has(tx.status)),...lendingItems.filter(tx=>HISTORY.has(tx.status))].sort((a,b)=>new Date(b.endDate)-new Date(a.endDate));
+            if(!hist.length) return <p className="text-sm text-slate-500">No completed transactions yet.</p>;
+            return (<div className="space-y-4">{hist.map(tx=>{
+              const open=expandedCard===tx._id+"-h";
+              const isBorrower=tx.borrower?._id?.toString()===currentUserId?.toString()||tx.borrower?.toString()===currentUserId?.toString();
+              return (<div key={tx._id+"-h"} onClick={()=>setExpandedCard(open?null:tx._id+"-h")} className={`p-5 rounded-2xl border cursor-pointer hover:border-indigo-500/50 transition-all ${isNight?"bg-slate-950 border-slate-800":"bg-white border-slate-100"}`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h4 className="font-extrabold text-sm text-indigo-400">{tx.title}</h4>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${STATUS_BADGE[tx.status]||"bg-slate-700/20 text-slate-400"}`}>{tx.status}</span>
+                      <span className="text-[10px] text-slate-500">{isBorrower?"rented":"lent"}</span>
+                      {tx.productType==="SECOND_HAND"&&<span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-black">SALE</span>}
                     </div>
-                    <span className={`text-xs font-bold transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
+                    <p className="text-xs text-slate-400">Rs.{tx.totalPaid?.toLocaleString()} total &bull; {isBorrower?`Owner: ${tx.owner?.name||"—"}`:`Borrower: ${tx.borrower?.name||"—"}`} &bull; {new Date(tx.endDate).toLocaleDateString()}</p>
                   </div>
-
-                  {isExpanded && (
-                    <div className="mt-6 pt-6 border-t border-slate-800/10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
-                        <span>{order.startDate}</span>
-                        <span>{order.endDate}</span>
-                      </div>
-                      <div className="relative w-full h-1 bg-slate-800 rounded-full my-4 flex items-center">
-                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full" style={{ width: `${order.progress}%` }}></div>
-                        <div className="absolute left-0 w-2.5 h-2.5 rounded-full bg-slate-600 -translate-x-1/2"></div>
-                        <div className="absolute w-4 h-4 rounded-full bg-emerald-500 border-2 border-white -translate-x-1/2 shadow-md" style={{ left: `${order.progress}%` }}></div>
-                        <div className="absolute right-0 w-2.5 h-2.5 rounded-full bg-slate-600 translate-x-1/2"></div>
-                      </div>
-                    </div>
-                  )}
+                  <span className={`text-xs font-bold transition-transform ${open?"rotate-180":""}`}>&#9660;</span>
                 </div>
-              );
-            })}
-          </div>
+                {open&&(<div className="mt-4 pt-4 border-t border-slate-800/10 text-xs text-slate-400 space-y-1" onClick={e=>e.stopPropagation()}>
+                  <p>Start: <span className="font-bold text-slate-300">{new Date(tx.startDate).toLocaleDateString()}</span></p>
+                  <p>End: <span className="font-bold text-slate-300">{new Date(tx.endDate).toLocaleDateString()}</span></p>
+                  <p>Rate: <span className="font-bold text-slate-300">Rs.{tx.dailyRate}/day</span></p>
+                  <p>Security: <span className="font-bold text-slate-300">Rs.{tx.securityDeposit?.toLocaleString()}</span></p>
+                </div>)}
+              </div>);
+            })}</div>);
+          })()}
         </div>
 
       </div>
 
-      {/* Extend/Shrink Request Modal (Middle of screen Popup) */}
-      {showAdjustModal && adjustRental && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm animate-fade-in" onClick={() => setShowAdjustModal(false)}>
-          <div className={`w-[90%] max-w-md rounded-3xl p-6 border shadow-2xl transition-colors ${isNight ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-indigo-50 text-slate-855"}`} onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-black mb-1">Adjust Possession Period</h3>
-            <p className="text-xs text-slate-400 mb-6">Modify rental details for: <span className="text-indigo-400 font-bold">{adjustRental.title}</span></p>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-2">Adjustment Type</label>
-                <div className={`flex rounded-xl p-1 gap-1 ${isNight ? "bg-slate-950" : "bg-slate-100"}`}>
-                  <button 
-                    onClick={() => setAdjustType("extend")}
-                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${adjustType === "extend" ? "bg-indigo-500 text-white shadow" : "text-slate-400 hover:text-white"}`}
-                  >
-                    Extension time
-                  </button>
-                  <button 
-                    onClick={() => setAdjustType("shrink")}
-                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${adjustType === "shrink" ? "bg-indigo-500 text-white shadow" : "text-slate-400 hover:text-white"}`}
-                  >
-                    Shrinkage time
-                  </button>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1">Select Number of Days</label>
-                <select 
-                  value={adjustDays}
-                  onChange={(e) => setAdjustDays(+e.target.value)}
-                  className={`w-full border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-colors ${isNight ? "bg-slate-950 text-white focus:border-indigo-500" : "bg-white text-slate-800 focus:border-indigo-400"}`}
-                >
-                  {[1, 2, 3, 5, 7, 10, 14].map(d => (
-                    <option key={d} value={d}>{d} Day{d > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1">Reason for Request <span className="text-[10px] text-slate-500 font-normal">(Optional)</span></label>
-                <textarea 
-                  rows={3}
-                  value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Describe your reasoning..."
-                  className={`w-full border border-slate-850 rounded-xl px-4 py-2.5 text-xs focus:outline-none resize-none transition-colors ${isNight ? "bg-slate-950 text-white focus:border-indigo-500" : "bg-white text-slate-800 focus:border-indigo-400"}`}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={() => setShowAdjustModal(false)}
-                  className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${isNight ? "border-slate-800 text-slate-400 hover:text-white" : "border-slate-200 text-slate-650 hover:text-slate-850"}`}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    setShowAdjustModal(false);
-                    setShowNotification(`Adjustment request sent to product owner: ${adjustType === "extend" ? "Extension" : "Shrinkage"} of ${adjustDays} day(s) requested.`);
-                  }}
-                  className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-bold hover:scale-102 transition-transform shadow-md"
-                >
-                  Request Button
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Choice Modal (Options Menu when profile pic is clicked, Instagram/Github style) */}
       {showChoiceModal && (
@@ -572,7 +508,7 @@ export default function Profile() {
                 onClick={() => fileInputRef.current?.click()}
                 className={`w-full py-3.5 rounded-2xl text-xs font-bold text-center border cursor-pointer transition-all ${isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-850 hover:text-indigo-400" : "bg-indigo-50/40 border-indigo-100 hover:bg-indigo-50 hover:text-indigo-600"}`}
               >
-                📁 Upload from Device
+                ≡ƒôü Upload from Device
               </button>
               
               <input 
@@ -611,7 +547,7 @@ export default function Profile() {
                 }}
                 className={`w-full py-3.5 rounded-2xl text-xs font-bold text-center border cursor-pointer transition-all ${isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-850 hover:text-indigo-400" : "bg-indigo-50/40 border-indigo-100 hover:bg-indigo-50 hover:text-indigo-600"}`}
               >
-                📷 Take Photo with Camera
+                ≡ƒô╖ Take Photo with Camera
               </button>
               
               {profilePic && (
@@ -624,7 +560,7 @@ export default function Profile() {
                   }}
                   className="w-full py-3.5 bg-red-500/10 border border-red-500/25 hover:bg-red-500/20 text-red-400 rounded-2xl text-xs font-bold text-center cursor-pointer transition-all"
                 >
-                  🗑️ Remove Current Photo
+                  ≡ƒùæ∩╕Å Remove Current Photo
                 </button>
               )}
               
@@ -712,7 +648,7 @@ export default function Profile() {
                     }}
                     className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-bold hover:scale-102 transition-all cursor-pointer shadow-lg"
                   >
-                    📸 Capture Photo
+                    ≡ƒô╕ Capture Photo
                   </button>
                 </div>
               </div>
@@ -838,7 +774,7 @@ export default function Profile() {
                           API.put("/auth/profile", { profilePic: croppedUrl })
                             .catch(err => console.error("Error saving profile pic to backend:", err));
                           setShowCropModal(false);
-                          setShowNotification("Avatar cropped and updated successfully! 🎉");
+                          setShowNotification("Avatar cropped and updated successfully! ≡ƒÄë");
                         }
                       };
                       img.src = rawImage;
@@ -857,9 +793,9 @@ export default function Profile() {
       {/* Floating Modern Toast Notification */}
       {showNotification && (
         <div className="fixed bottom-6 left-6 z-[110] flex items-center gap-3 bg-slate-950 border border-indigo-500/30 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-[0_12px_40px_rgba(99,102,241,0.2)] animate-slide-in">
-          <span className="text-indigo-400 font-black">🔔 Alert:</span>
+          <span className="text-indigo-400 font-black">≡ƒöö Alert:</span>
           <span>{showNotification}</span>
-          <button onClick={() => setShowNotification("")} className="ml-3 text-slate-400 hover:text-white font-extrabold">✕</button>
+          <button onClick={() => setShowNotification("")} className="ml-3 text-slate-400 hover:text-white font-extrabold">Γ£ò</button>
         </div>
       )}
     </div>

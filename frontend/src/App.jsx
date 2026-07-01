@@ -18,6 +18,7 @@ import DesktopChatbox from "./components/DesktopChatbox";
 import RentCheckout from "./pages/RentCheckout";
 import AdminRoute from "./components/AdminRoute";
 import AdminDashboard from "./pages/AdminDashboard";
+import BlockedPage from "./pages/BlockedPage";
 
 function App() {
   useEffect(() => {
@@ -50,6 +51,7 @@ function App() {
         <Route path="/requested-catalog" element={<RequestedCatalogPage />} />
         <Route path="/my-listings" element={<MyListings />} />
         <Route path="/rent/checkout/:id" element={<RentCheckout />} />
+        <Route path="/blocked" element={<BlockedPage />} />
         <Route
           path="/admin"
           element={

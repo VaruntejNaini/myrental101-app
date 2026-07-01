@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api";
+import { Handshake, Search } from "lucide-react";
+
 import NotificationBell from "../components/NotificationBell";
 import ChatBell from "../components/ChatBell";
 import PostProductModal from "../components/PostProductModal";
@@ -747,7 +749,7 @@ export default function SecondHandCatalogPage() {
           <NotificationBell isNight={isNight} />
         </div>
         <div>
-          <h1 className="text-xl md:text-3xl font-black text-right">🤝 Second-Hand Purchase Hub</h1>
+          <h1 className="text-xl md:text-3xl font-black text-right"><Handshake className="w-8 h-8 text-indigo-500 inline mr-2" /> Second-Hand Purchase Hub</h1>
           <p className="text-[10px] text-slate-400 text-right mt-0.5">Direct peer-to-peer buyouts and verified conditions</p>
         </div>
       </div>
@@ -866,7 +868,7 @@ export default function SecondHandCatalogPage() {
             </div>
           ) : productsWithDistance.length === 0 ? (
             <div className={`text-center py-20 rounded-2xl border border-dashed ${isNight ? "bg-slate-900/40 border-slate-850" : "bg-white border-slate-205 text-slate-800"}`}>
-              <span className="text-4xl block mb-2">🔍</span>
+              <Search className="w-10 h-10 mx-auto mb-2 text-slate-450" />
               <p className="font-bold text-slate-400 text-sm">No items found matching your filters</p>
               <p className="text-xs text-slate-500 mt-1">Try resetting the keyword or expanding the pricing/distance radius.</p>
             </div>

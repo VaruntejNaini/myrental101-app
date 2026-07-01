@@ -83,6 +83,10 @@ function Login() {
       }
       navigate("/dashboard");
     } catch (err) {
+      if (err.response?.data?.msg === "ACCOUNT_BLOCKED") {
+        navigate("/blocked");
+        return;
+      }
       setError(err.response?.data?.msg || "Login failed");
     } finally {
       setLoading(false);
@@ -103,6 +107,10 @@ function Login() {
       }
       navigate("/dashboard");
     } catch (err) {
+      if (err.response?.data?.msg === "ACCOUNT_BLOCKED") {
+        navigate("/blocked");
+        return;
+      }
       setError(err.response?.data?.msg || "Google Authentication failed");
     } finally {
       setLoading(false);

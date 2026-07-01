@@ -86,6 +86,14 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // ACCOUNT STATUS
+    isBlocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     profilePic: {
       type: String,
       default: "",

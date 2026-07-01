@@ -114,3 +114,39 @@ export async function listUsers(req, res) {
     handleError(res, err);
   }
 }
+
+export async function blockUser(req, res) {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+    if (user.role === "ADMIN") {
+      return res.status(403).json({ msg: "Cannot block another admin." });
+    }
+    if (user._id.toString() === req.userId) {
+      return res.status(403).json({ msg: "Cannot block yourself." });
+    }
+    user.isBlocked = true;
+    await user.save();
+    res.json({ success: true, msg: `User ${user.email} has been blocked.` });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function unblockUser(req, res) {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+    user.isBlocked = false;
+    await user.save();
+    res.json({ success: true, msg: `User ${user.email} has been unblocked.` });
+  } catch (err) {
+    handleError(res, err);
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Map, Phone, MessageSquare, AlertTriangle, Search, MapPin, Trash2, Bell, X } from "lucide-react";
 import API from "../api";
 import { broadcastAddressUpdate } from "../utils/addressSync";
 
@@ -725,7 +726,7 @@ export default function AddressManagement() {
           <div className={`text-center py-16 px-6 rounded-3xl border border-dashed ${
             isNight ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-200 shadow-sm"
           }`}>
-            <span className="text-6xl block mb-4 select-none">🗺️</span>
+            <Map className="w-16 h-16 mx-auto mb-4 text-indigo-400 select-none" />
             <h2 className="text-xl font-black mb-2">No addresses saved yet</h2>
             <p className="text-sm text-slate-450 max-w-sm mx-auto mb-6">Add your delivery address to explore rentals and checkout seamlessly.</p>
             <button 
@@ -817,11 +818,11 @@ export default function AddressManagement() {
                     </div>
 
                     <h4 className="font-extrabold text-sm mb-1">{addr.firstName} {addr.lastName}</h4>
-                    <p className="text-xs text-slate-400 font-bold mb-3">📞 {addr.mobileNumber}</p>
+                    <p className="text-xs text-slate-450 font-bold mb-3 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" /> {addr.mobileNumber}</p>
                     <p className="text-xs text-slate-450 leading-relaxed mb-4">{addr.fullAddress}</p>
                     {addr.addressDescription && (
-                      <p className={`text-[10px] italic p-2 rounded-xl mb-4 ${isNight ? "bg-slate-950/60 text-slate-450" : "bg-slate-50 text-slate-500"}`}>
-                        💬 "{addr.addressDescription}"
+                      <p className={`text-[10px] italic p-2 rounded-xl mb-4 flex items-center gap-1.5 ${isNight ? "bg-slate-950/60 text-slate-450" : "bg-slate-50 text-slate-500"}`}>
+                        <MessageSquare className="w-3 h-3 text-slate-400 shrink-0" /> "{addr.addressDescription}"
                       </p>
                     )}
                   </div>
@@ -870,11 +871,10 @@ export default function AddressManagement() {
           >
             
             {/* Left side: Maps selector panel */}
-            <div className="w-full md:w-1/2 h-72 md:h-auto min-h-[300px] relative bg-slate-950 flex flex-col justify-end">
-              
+            <div className="w-full md:w-1/2 h-72 md:h-auto min-h-[300px] relative bg-slate-950 flex flex-col justify-center overflow-hidden">
               {mapsError && (
                 <div className="absolute inset-0 bg-red-950/90 text-white flex flex-col items-center justify-center p-6 text-center z-10">
-                  <span className="text-4xl block mb-2">⚠️</span>
+                  <AlertTriangle className="w-10 h-10 mb-2 text-rose-500" />
                   <h4 className="font-extrabold text-sm mb-1">Google Maps API Error</h4>
                   <p className="text-xs text-slate-400">Failed to initialize location coordinates. Please verify your connection status and API keys.</p>
                 </div>
@@ -895,7 +895,7 @@ export default function AddressManagement() {
                 <input 
                   type="text" 
                   ref={searchInputRef}
-                  placeholder="🔍 Search for street name or city..."
+                  placeholder="Search for street name or city..."
                   className={`w-full px-4 py-2.5 rounded-xl border text-xs font-bold shadow-lg focus:outline-none transition ${
                     isNight ? "bg-slate-900 border-slate-800 text-white focus:border-indigo-500" : "bg-white border-slate-200 text-slate-800 focus:border-indigo-500"
                   }`}
@@ -920,7 +920,7 @@ export default function AddressManagement() {
                       Locating...
                     </>
                   ) : (
-                    <>🎯 Use Current Location</>
+                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> Use Current Location</span>
                   )}
                 </button>
               </div>
@@ -936,14 +936,14 @@ export default function AddressManagement() {
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
-                    <span>📍</span> {modalType === "new" ? "Add Delivery Address" : "Edit Address Details"}
+                    <MapPin className="w-5 h-5 text-indigo-500" /> {modalType === "new" ? "Add Delivery Address" : "Edit Address Details"}
                   </h3>
                   <button 
                     type="button"
                     onClick={() => setModalOpen(false)}
-                    className={`p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer`}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1228,7 +1228,7 @@ export default function AddressManagement() {
             }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="text-4xl block mb-2 select-none">🗑️</span>
+            <Trash2 className="w-12 h-12 mx-auto mb-3 text-rose-500 select-none" />
             <h3 className="text-lg font-black mb-1">Remove Address</h3>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">Are you absolutely sure you want to remove this delivery address from your database account? This cannot be undone.</p>
             <div className="flex gap-3">
@@ -1254,9 +1254,11 @@ export default function AddressManagement() {
       {/* Toast popup */}
       {toastMsg && (
         <div className="fixed bottom-6 left-6 z-[140] flex items-center gap-3 bg-slate-950 border border-indigo-500/30 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-[0_12px_40px_rgba(99,102,241,0.2)] animate-slide-in">
-          <span className="text-indigo-400 font-black">🔔 Alert:</span>
+          <span className="text-indigo-400 font-black flex items-center gap-1.5"><Bell className="w-3.5 h-3.5" /> Alert:</span>
           <span>{toastMsg}</span>
-          <button onClick={() => setToastMsg("")} className="ml-3 text-slate-400 hover:text-white font-extrabold cursor-pointer">✕</button>
+          <button onClick={() => setToastMsg("")} className="ml-3 text-slate-400 hover:text-white font-extrabold cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

@@ -1,5 +1,6 @@
 // src/components/Footer.jsx
 import React, { useState } from "react";
+import { Globe, ChevronDown } from "lucide-react";
 import "./Footer.css";
 
 const footerColumns = [
@@ -57,7 +58,7 @@ export default function Footer({ brand = "Rentit" }) {
       {/* Language & Currency Selectors */}
       <div className="footer-v2__selectors">
         <div className="footer-v2__select-wrap">
-          <span className="footer-v2__select-icon">🌐</span>
+          <span className="footer-v2__select-icon flex items-center justify-center"><Globe className="w-3.5 h-3.5" /></span>
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value)}
@@ -68,7 +69,7 @@ export default function Footer({ brand = "Rentit" }) {
               <option key={l} value={l}>{l}</option>
             ))}
           </select>
-          <span className="footer-v2__chevron">▾</span>
+          <span className="footer-v2__chevron flex items-center justify-center pointer-events-none"><ChevronDown className="w-3 h-3" /></span>
         </div>
         <div className="footer-v2__select-wrap">
           <span className="footer-v2__select-icon">$</span>
@@ -82,7 +83,7 @@ export default function Footer({ brand = "Rentit" }) {
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <span className="footer-v2__chevron">▾</span>
+          <span className="footer-v2__chevron flex items-center justify-center pointer-events-none"><ChevronDown className="w-3 h-3" /></span>
         </div>
       </div>
 

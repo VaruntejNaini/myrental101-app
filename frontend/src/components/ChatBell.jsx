@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { MessageSquare } from "lucide-react";
 import ChatDrawer from "./ChatDrawer";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
+
 
 export default function ChatBell({ isNight }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -41,7 +43,7 @@ export default function ChatBell({ isNight }) {
         }`}
         title="Messages"
       >
-        <span className="text-base select-none">💬</span>
+        <MessageSquare className="w-5 h-5 select-none" />
         {unreadCount > 0 && (
           <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white ring-2 ring-white dark:ring-slate-950 select-none shadow animate-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}

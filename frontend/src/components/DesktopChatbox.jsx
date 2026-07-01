@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { User, Plus, Minus, X, Send } from "lucide-react";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
 
@@ -142,16 +143,17 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   const myProfilePic = localStorage.getItem("userProfilePic") || "";
   const myName = localStorage.getItem("user_name") || "Me";
 
-  // Fetch populated transaction details from backend for robust header info
+  // Fetch populated transaction details — called on mount and after any status-changing action
+  const fetchTxDetails = async () => {
+    try {
+      const res = await API.get(`/rent/transactions/${chat.transactionId}`);
+      setTxDetails(res.data);
+    } catch (err) {
+      console.error("Error fetching transaction details in chatbox:", err);
+    }
+  };
+
   useEffect(() => {
-    const fetchTxDetails = async () => {
-      try {
-        const res = await API.get(`/rent/transactions/${chat.transactionId}`);
-        setTxDetails(res.data);
-      } catch (err) {
-        console.error("Error fetching transaction details in chatbox:", err);
-      }
-    };
     fetchTxDetails();
   }, [chat.transactionId]);
 
@@ -161,23 +163,26 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
     ? (isOwner ? txDetails.borrower : txDetails.owner)
     : chat.otherUser;
 
-  // Poll chat messages
+  // Poll chat messages AND refresh tx status so checkout button appears automatically
   const fetchMessages = async () => {
     try {
       const res = await API.get(`/rent/chat/${chat.transactionId}`);
       setMessages((prev) => {
-        // Retain optimistic messages that haven't been replaced yet
         const optimisticMsgs = prev.filter((m) => m.isOptimistic);
-        
-        // Remove duplicate optimistic messages if the actual message has arrived
         const filteredOptimistic = optimisticMsgs.filter(
           (opt) => !res.data.some((real) => real.content === opt.content && real.sender === opt.sender)
         );
-        
         return [...res.data, ...filteredOptimistic];
       });
     } catch (err) {
       console.error("Error fetching messages in chatbox:", err);
+    }
+    // Refresh tx status on every poll cycle so both parties see state changes in real-time
+    try {
+      const txRes = await API.get(`/rent/transactions/${chat.transactionId}`);
+      setTxDetails(txRes.data);
+    } catch (err) {
+      // non-fatal
     }
   };
 
@@ -284,8 +289,9 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
 
   const handleResolveNegotiation = async (action) => {
     try {
-      const res = await API.post(`/rent/negotiate/${chat.transactionId}/resolve`, { action });
-      setTxDetails(res.data);
+      await API.post(`/rent/negotiate/${chat.transactionId}/resolve`, { action });
+      // Re-fetch immediately so both parties' chatboxes update without waiting for next poll
+      await fetchTxDetails();
       window.dispatchEvent(new Event("refreshNotificationCount"));
     } catch (err) {
       console.error("Error resolving negotiation in chat:", err);
@@ -319,7 +325,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
             {resolvedOtherUser?.profilePic ? (
               <img src={resolvedOtherUser.profilePic} alt={resolvedOtherUser.name} className="w-full h-full object-cover" />
             ) : (
-              resolvedOtherUser?.name ? resolvedOtherUser.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "👤"
+              resolvedOtherUser?.name ? resolvedOtherUser.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : <User className="w-3.5 h-3.5" />
             )}
           </div>
           <div className="flex flex-col min-w-0">
@@ -335,14 +341,14 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
             className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold focus-visible:ring-1 focus-visible:ring-white focus-visible:outline-none"
             title={chat.isMinimized ? "Expand" : "Minimize"}
           >
-            {chat.isMinimized ? "➕" : "➖"}
+            {chat.isMinimized ? <Plus className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={onClose}
             className="w-5 h-5 flex items-center justify-center hover:bg-white/15 rounded cursor-pointer text-xs font-extrabold focus-visible:ring-1 focus-visible:ring-white focus-visible:outline-none"
             title="Close"
           >
-            ✕
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -397,13 +403,23 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
                       onClick={() => navigate(`/rent/checkout/${chat.transactionId}`)}
                       className="w-full py-1 px-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[9px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center mt-2"
                     >
-                      Proceed to Checkout
+                      Proceed to Checkout →
                     </button>
                   ) : (
                     <span className="text-[9px] font-bold text-slate-500 dark:text-zinc-400 block mt-1">
                       Waiting for borrower payment checkout...
                     </span>
                   )
+                )}
+                {txDetails?.status === "RESERVED" && (
+                  <span className="text-[9px] font-bold text-emerald-500 block mt-1">
+                    ✓ Payment secured. Check your 🔔 Orders panel for OTP handoff.
+                  </span>
+                )}
+                {txDetails?.status === "NEGOTIATION_DECLINED" && (
+                  <span className="text-[9px] font-bold text-red-400 block mt-1">
+                    ✗ Offer rejected. This negotiation is closed.
+                  </span>
                 )}
               </div>
             )}
@@ -455,7 +471,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
               className="w-7 h-7 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full cursor-pointer transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               title="Send"
             >
-              ➔
+              <Send className="w-3 h-3" />
             </button>
           </form>
         </>

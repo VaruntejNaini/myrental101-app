@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
+import { ActiveAuctionView } from "../components/Auction/ActiveAuctionView";
 
 export const getImageUrl = (image) => {
   if (!image) return "";
@@ -17,7 +18,6 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState(null);
   const [auction, setAuction] = useState(null);
   const [duration, setDuration] = useState(3);
-  const [bidAmount, setBidAmount] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [activeTab, setActiveTab] = useState("Product information");
   const [loading, setLoading] = useState(true);
@@ -241,25 +241,6 @@ export default function ProductDetailPage() {
     }
   };
 
-  const handlePlaceBid = async (e) => {
-    e.preventDefault();
-    if (!bidAmount) return;
-    try {
-      const res = await API.post(`/rent/auction/${id}/bid`, {
-        amount: Number(bidAmount),
-        durationDays: duration
-      });
-      setAuction(res.data);
-      if (product) {
-        setProduct({ ...product, currentBid: Number(bidAmount) });
-      }
-      triggerToast(`Successfully placed bid of ₹${bidAmount}!`);
-      setBidAmount("");
-    } catch (err) {
-      triggerToast(err.response?.data?.msg || "Failed to place bid");
-    }
-  };
-
   const handleAction = async () => {
     if (!product) return;
     if (product.productType === "SECOND_HAND") {
@@ -464,7 +445,7 @@ export default function ProductDetailPage() {
               </div>
             ) : (
               <>
-                {/* 5. Rent / Buy Button */}
+                {/* 5. Rent / Buy Button or Live Auction */}
                 {product.status !== "AUCTION_ACTIVE" ? (
                   <button 
                     onClick={handleAction}
@@ -477,27 +458,15 @@ export default function ProductDetailPage() {
                     )}
                   </button>
                 ) : (
-                  <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs">
-                    <span className="font-extrabold text-orange-500">🔥 SURGE DEMAND AUCTION ACTIVE</span>
-                    <p className="text-slate-400 mt-1">Countdown: Ending soon. Top bid: <strong>₹{auction?.currentHighestBid}</strong></p>
-                    <form onSubmit={handlePlaceBid} className="mt-3 flex gap-2">
-                      <input
-                        type="number"
-                        value={bidAmount}
-                        onChange={(e) => setBidAmount(e.target.value)}
-                        placeholder={`Bid > ₹${auction?.currentHighestBid}`}
-                        className={`flex-1 px-3 py-2 border rounded-xl focus:outline-none text-xs ${
-                          isNight ? "bg-slate-950 border-slate-800 text-white" : "bg-white border-slate-200"
-                        }`}
-                      />
-                      <button type="submit" className="bg-orange-500 text-white font-bold px-4 py-2 rounded-xl">
-                        Bid
-                      </button>
-                    </form>
-                  </div>
+                  // Live auction — render unified real-time auction UI
+                  <ActiveAuctionView
+                    auctionId={auction?._id?.toString()}
+                    initialAuction={auction}
+                    currentUser={currentUser}
+                  />
                 )}
 
-                {/* 6. Negotiate Button */}
+                {/* 6. Negotiate Button — only shown when NOT in auction */}
                 {product.productType === "RENT" && product.status !== "AUCTION_ACTIVE" && (
                   <div className="space-y-3">
                     <button

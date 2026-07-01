@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Transaction from "../models/Transaction.js";
 import Product from "../models/Product.js";
 import { logAction, logFailure, validateSummaryText } from "./auditService.js";
+import { awardReputation } from "./reputationService.js";
 
 const VALID_OUTCOMES = ["RELEASE_TO_OWNER", "REFUND_BORROWER", "SPLIT"];
 const DISPUTE_STATUSES = ["DISPUTED", "DAMAGE_REVIEW"];
@@ -136,6 +137,19 @@ export async function resolveDispute({
     }
 
     await Product.findByIdAndUpdate(transaction.product, { status: "ACTIVE" }, { session });
+
+    // Reputation deductions based on dispute outcome
+    if (outcome === "RELEASE_TO_OWNER") {
+      // Borrower was at fault
+      await awardReputation(transaction.borrower, -10, "DISPUTE_LOST");
+    } else if (outcome === "REFUND_BORROWER") {
+      // Owner was at fault
+      await awardReputation(transaction.owner, -10, "DISPUTE_LOST");
+    } else if (outcome === "SPLIT") {
+      // Both parties share blame
+      await awardReputation(transaction.borrower, -5, "DISPUTE_SPLIT");
+      await awardReputation(transaction.owner, -5, "DISPUTE_SPLIT");
+    }
 
     await logAction({
       actor: adminId,

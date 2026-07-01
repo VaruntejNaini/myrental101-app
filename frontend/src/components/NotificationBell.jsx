@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { Bell } from "lucide-react";
 import API from "../api";
 import NotificationDrawer from "./NotificationDrawer";
+
 
 export default function NotificationBell({ isNight }) {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -38,7 +40,7 @@ export default function NotificationBell({ isNight }) {
         }`}
         title="Notifications"
       >
-        <span className="text-base select-none">🔔</span>
+        <Bell className="w-5 h-5 select-none" />
         {unreadCount > 0 && (
           <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center font-bold text-[9px] border-2 border-white dark:border-slate-950 animate-pulse">
             {unreadCount}

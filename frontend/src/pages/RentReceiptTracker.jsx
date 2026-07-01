@@ -131,14 +131,14 @@ export default function RentReceiptTracker() {
             </div>
 
             <div className="mt-6 flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5 text-xs text-violet-100">
-              <span>📍</span> Meet host at <strong>Starbucks, Gachibowli Main Rd</strong> for handover inspection.
+              <span><MapPin className="w-4 h-4 inline mr-2" /></span> Meet host at <strong>Starbucks, Gachibowli Main Rd</strong> for handover inspection.
             </div>
           </div>
 
           {/* Secure Handoff Step-by-Step checklist */}
           <div className={`p-6 rounded-3xl border ${isNight ? "bg-slate-900/80 border-slate-800" : "bg-white border-slate-200/60"}`}>
             <h3 className="font-semibold text-base mb-4 flex items-center gap-2">
-              <span>🗝️</span> Pre-Rental Verification Guidelines
+              <span><Key className="w-4 h-4 inline mr-2" /></span> Pre-Rental Verification Guidelines
             </h3>
             
             <div className="space-y-3.5 text-sm">
@@ -244,7 +244,7 @@ export default function RentReceiptTracker() {
                 onClick={() => alert("Downloading PDF Receipt...")}
                 className="w-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-center"
               >
-                📄 Receipt PDF
+                <FileText className="w-4 h-4 inline mr-2" /> Receipt PDF
               </button>
               <button 
                 onClick={() => navigate("/dashboard")}

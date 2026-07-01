@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../api";
+import { CreditCard } from "lucide-react";
+
 
 export default function RentCheckout() {
   const { id } = useParams();
@@ -22,6 +24,8 @@ export default function RentCheckout() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [productDetails, setProductDetails] = useState(null);
   const [transactionDetails, setTransactionDetails] = useState(null);
+  // Inline field errors
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const getBackendId = (paramId) => {
     if (paramId === "r-1" || paramId === "rent_camera_1") return "60d5ecb8b5c9c93d98e8a8a1";
@@ -92,28 +96,49 @@ export default function RentCheckout() {
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    if (!agreed) {
-      alert("Please review and electronically sign the Rental Agreement!");
-      return;
-    }
-    if (!cardName || !cardNumber || !cardExpiry || !cardCvv) {
-      alert("Please fill out all credit card details!");
-      return;
-    }
+
+    // ── Field-level validation ──────────────────────────────────────────────
+    const errors = {};
+    if (!agreed) errors.agreed = "Please accept the rental terms to continue.";
+    if (!cardName.trim()) errors.cardName = "Cardholder name is required.";
+    else if (!/^[A-Za-z\s]+$/.test(cardName.trim())) errors.cardName = "Name must contain letters only.";
+
+    const rawDigits = cardNumber.replace(/\s/g, "");
+    if (!rawDigits) errors.cardNumber = "Card number is required.";
+    else if (!/^\d{16}$/.test(rawDigits)) errors.cardNumber = "Enter a valid 16-digit card number.";
+
+    if (!cardExpiry) errors.cardExpiry = "Expiry date is required.";
+    else if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(cardExpiry)) errors.cardExpiry = "Use MM/YY format.";
+
+    if (!cardCvv) errors.cardCvv = "CVV is required.";
+    else if (!/^\d{3}$/.test(cardCvv)) errors.cardCvv = "CVV must be 3 digits.";
+
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    // ────────────────────────────────────────────────────────────────────────
 
     setIsProcessing(true);
 
     try {
       let transactionId;
+
       if (transactionDetails) {
         transactionId = transactionDetails._id;
-        if (transactionDetails.status !== "AWAITING_PAYMENT" && transactionDetails.status !== "ACCEPTED" && transactionDetails.status !== "RESERVED") {
-          await API.post(`/rent/negotiate/${transactionId}/resolve`, {
-            action: "ACCEPT"
-          });
+
+        if (transactionDetails.status === "AWAITING_PAYMENT") {
+          // Owner already accepted — go straight to checkout, no resolve needed
+        } else if (transactionDetails.status === "RESERVED") {
+          // Already paid — skip checkout entirely, just navigate to orders
+          setIsProcessing(false);
+          navigate("/orders");
+          return;
+        } else if (
+          transactionDetails.status !== "ACCEPTED"
+        ) {
+          // Status is something unexpected — try to accept (owner may not have yet)
+          await API.post(`/rent/negotiate/${transactionId}/resolve`, { action: "ACCEPT" });
         }
       } else {
-        // Create transaction first
         const backendId = getBackendId(id);
         const negotiationRes = await API.post("/rent/negotiate", {
           productId: backendId,
@@ -122,32 +147,24 @@ export default function RentCheckout() {
           dailyRate: productDetails.rentalPrice,
           securityDeposit: productDetails.securityDeposit,
         });
-
         transactionId = negotiationRes.data._id;
-
-        // Update negotiation status to simulate accepting offer if needed
-        await API.post(`/rent/negotiate/${transactionId}/resolve`, {
-          action: "ACCEPT"
-        });
+        await API.post(`/rent/negotiate/${transactionId}/resolve`, { action: "ACCEPT" });
       }
 
-      // Submit checkout details securely
-      const checkoutRes = await API.post(`/rent/checkout/${transactionId}`);
-      
+      await API.post(`/rent/checkout/${transactionId}`);
       setIsProcessing(false);
-      
-      // Save details for the live progress timeline tracker
+
       sessionStorage.setItem("active_booking_id", transactionId);
       sessionStorage.setItem("active_booking_item", productDetails.title);
       sessionStorage.setItem("active_booking_total", grandTotal.toString());
       sessionStorage.setItem("active_booking_days", days.toString());
       sessionStorage.setItem("active_booking_start", startDate);
       sessionStorage.setItem("active_booking_end", endDate);
-      
-      navigate(`/orders`);
+
+      navigate("/orders");
     } catch (err) {
       setIsProcessing(false);
-      alert(err.response?.data?.msg || "Checkout failed. Overlapping booking conflict detected!");
+      setFieldErrors({ submit: err.response?.data?.msg || "Checkout failed. Please try again." });
     }
   };
 
@@ -179,64 +196,98 @@ export default function RentCheckout() {
                 By ticking the agreement below, you commit to take good care of the device. Any structural damage or scratch reported by the owner will lock your security deposit amount (₹{deposit}) inside the secure escrow portal until platform administration audits the claims.
               </div>
               <label className="flex items-center gap-2 text-xs font-bold">
-                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="accent-violet-600" />
+                <input type="checkbox" checked={agreed} onChange={(e) => { setAgreed(e.target.checked); if (fieldErrors.agreed) setFieldErrors(prev => ({ ...prev, agreed: "" })); }} className="accent-violet-600" />
                 I accept the terms and authorize security deposit hold.
               </label>
+              {fieldErrors.agreed && <p className="text-red-400 text-[11px] mt-1">{fieldErrors.agreed}</p>}
             </div>
 
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-md">
               <h3 className="font-semibold text-lg text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                <span>💳</span> Billing & Card Details
+                <span><CreditCard className="w-4 h-4 inline mr-2" /></span> Billing & Card Details
               </h3>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Cardholder Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
+                    onChange={(e) => {
+                      // Letters and spaces only
+                      const v = e.target.value.replace(/[^A-Za-z\s]/g, "");
+                      setCardName(v);
+                      if (fieldErrors.cardName) setFieldErrors(prev => ({ ...prev, cardName: "" }));
+                    }}
                     placeholder="Varun Tej"
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm font-semibold border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-violet-500 text-slate-800 dark:text-slate-200"
+                    className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm font-semibold border rounded-xl focus:outline-none focus:border-violet-500 text-slate-800 dark:text-slate-200 ${fieldErrors.cardName ? "border-red-500" : "border-slate-200 dark:border-slate-800"}`}
                   />
+                  {fieldErrors.cardName && <p className="text-red-400 text-[11px] mt-1">{fieldErrors.cardName}</p>}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Credit Card Number</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
+                    inputMode="numeric"
                     value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
+                    onChange={(e) => {
+                      // Digits only, auto-space every 4
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                      const formatted = digits.replace(/(.{4})/g, "$1 ").trim();
+                      setCardNumber(formatted);
+                      if (fieldErrors.cardNumber) setFieldErrors(prev => ({ ...prev, cardNumber: "" }));
+                    }}
                     placeholder="•••• •••• •••• ••••"
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-violet-500 text-slate-800 dark:text-slate-200"
+                    maxLength={19}
+                    className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border rounded-xl focus:outline-none focus:border-violet-500 text-slate-800 dark:text-slate-200 tracking-widest ${fieldErrors.cardNumber ? "border-red-500" : "border-slate-200 dark:border-slate-800"}`}
                   />
+                  {fieldErrors.cardNumber && <p className="text-red-400 text-[11px] mt-1">{fieldErrors.cardNumber}</p>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Expiry Date</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
+                      inputMode="numeric"
                       value={cardExpiry}
-                      onChange={(e) => setCardExpiry(e.target.value)}
+                      onChange={(e) => {
+                        // Auto-insert slash after MM
+                        let v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                        if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
+                        setCardExpiry(v);
+                        if (fieldErrors.cardExpiry) setFieldErrors(prev => ({ ...prev, cardExpiry: "" }));
+                      }}
                       placeholder="MM/YY"
-                      maxLength="5"
-                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none"
+                      maxLength={5}
+                      className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border rounded-xl focus:outline-none ${fieldErrors.cardExpiry ? "border-red-500" : "border-slate-200 dark:border-slate-800"}`}
                     />
+                    {fieldErrors.cardExpiry && <p className="text-red-400 text-[11px] mt-1">{fieldErrors.cardExpiry}</p>}
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">CVV / CVC</label>
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
+                      inputMode="numeric"
                       value={cardCvv}
-                      onChange={(e) => setCardCvv(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+                        setCardCvv(v);
+                        if (fieldErrors.cardCvv) setFieldErrors(prev => ({ ...prev, cardCvv: "" }));
+                      }}
                       placeholder="•••"
-                      maxLength="3"
-                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none"
+                      maxLength={3}
+                      className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 text-sm border rounded-xl focus:outline-none ${fieldErrors.cardCvv ? "border-red-500" : "border-slate-200 dark:border-slate-800"}`}
                     />
+                    {fieldErrors.cardCvv && <p className="text-red-400 text-[11px] mt-1">{fieldErrors.cardCvv}</p>}
                   </div>
                 </div>
+
+                {fieldErrors.submit && (
+                  <p className="text-red-400 text-xs font-bold mt-2 p-3 bg-red-500/10 rounded-xl border border-red-500/20">{fieldErrors.submit}</p>
+                )}
               </div>
             </div>
 
@@ -249,7 +300,7 @@ export default function RentCheckout() {
                   : "bg-slate-400 dark:bg-slate-850 cursor-not-allowed opacity-50"
               }`}
             >
-              <span>💳 Securely Pay & Authorize ₹{grandTotal.toLocaleString()}</span>
+              <span><CreditCard className="w-4 h-4 inline mr-2" /> Securely Pay & Authorize ₹{grandTotal.toLocaleString()}</span>
             </button>
           </form>
 

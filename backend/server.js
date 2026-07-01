@@ -14,7 +14,7 @@ import addressRoutes from "./routes/addresses.js";
 import adminRoutes from "./routes/admin.js";
 import auctionRoutes from "./controllers/auctionController.js";
 import { initAuctionSockets } from "./sockets/auctionSockets.js";
-//import { initAuctionScheduler } from "./services/auctionSchedulerService.js";
+import { initAuctionScheduler } from "./services/auctionSchedulerService.js";
 //import { initNotificationQueue } from "./services/notificationQueueService.js";
 import http from "http";
 
@@ -144,10 +144,7 @@ const migrateOldNotifications = async () => {
 
 mongoose.connection.once("open", async () => {
   await migrateOldNotifications();
-
-  // TEMPORARILY DISABLED FOR DEBUGGING
-  // await initAuctionScheduler();
-  // await initNotificationQueue();
+  await initAuctionScheduler();
 });
 
 

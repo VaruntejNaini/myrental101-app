@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import axios from "axios";
 import { verifyToken, requireAdmin } from "../middleware/auth.js";
 import { adminLimiter } from "../middleware/adminLimiter.js";
 import { resolveDispute } from "../controllers/adminController.js";
@@ -15,6 +16,7 @@ import User from "../models/User.js";
 import { awardReputation } from "../services/reputationService.js";
 import Bookmark from "../models/Bookmark.js";
 import Bid from "../models/Bid.js";
+import { createAuction } from "../services/auctionService.js";
 
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
@@ -571,6 +573,12 @@ router.delete("/products/:id", verifyToken, async (req, res) => {
     }
 
     await Product.findByIdAndDelete(req.params.id);
+
+    // Deduct reputation if owner retracted while negotiations were active
+    if (activeTransactions.length > 0) {
+      await awardReputation(req.userId, -5, "LISTING_RETRACTED");
+    }
+
     res.json({ msg: "Product listing deleted cleanly and active negotiations retracted." });
   } catch (err) {
     res.status(500).json({ msg: err.message });
@@ -658,24 +666,31 @@ router.post("/negotiate", verifyToken, async (req, res) => {
     }).session(session);
 
     if (recentRequestsCount >= 5 && product.status === "ACTIVE") {
-      // Auto Escalation to Active Micro-Auction
-      product.status = "AUCTION_ACTIVE";
-      await product.save({ session });
-
-      const endsInHours = 3;
-      await Auction.create([{
-        product: product._id,
-        ownerId: product.owner,
-        type: product.productType === "RENT" ? "RENTAL" : "SECOND_HAND",
-        startingBid: product.rentalPrice,
-        reservePrice: product.rentalPrice,
-        currentHighestBid: dailyRate,
-        highestBidderId: req.userId,
-        endTime: new Date(Date.now() + endsInHours * 60 * 60 * 1000),
-        status: "ACTIVE"
-      }], { session });
-
-      await createNotification(product.owner, "NEW_BID", "Surge Demand Triggered!", `High demand detected. Listing "${product.title}" has been escalated to a micro-auction.`, req.userId, `/product/${product._id}`, null, session);
+      // Auto Escalation — delegate to unified AuctionService
+      const io = req.app?.get?.('io') || null;
+      await createAuction(
+        {
+          productId: product._id,
+          ownerId: product.owner,
+          type: product.productType === "RENT" ? "RENTAL" : "SECOND_HAND",
+          startingBid: product.rentalPrice,
+          reservePrice: product.rentalPrice,
+          durationHours: 3,
+        },
+        session,
+        io
+      );
+      // Notify owner — createAuction already notifies, but add a more specific surge message
+      await createNotification(
+        product.owner,
+        "NEW_BID",
+        "Surge Demand Triggered!",
+        `High demand detected. Listing "${product.title}" has been escalated to a live auction.`,
+        req.userId,
+        `/product/${product._id}`,
+        null,
+        session
+      );
     } else {
       const isSecondHand = product.productType === "SECOND_HAND";
       const title = isSecondHand ? "New Purchase Request" : "New Rental Negotiation";
@@ -749,12 +764,15 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
         : `Your negotiation for "${transaction.product?.title || 'Product'}" has been rejected.`;
       const redirectUrl = transaction.product ? `/product/${transaction.product._id}?tx=${transaction._id}` : "";
       await createNotification(transaction.borrower, "OFFER_REJECTED", "Negotiation Rejected ❌", notifMsg, req.userId, redirectUrl, transaction._id);
-      
+
+      // Deduct reputation from borrower when their negotiation is rejected
+      await awardReputation(transaction.borrower, -2, "NEGOTIATION_REJECTED");
+
       transaction.status = "NEGOTIATION_DECLINED";
       transaction.resolvedAt = new Date();
       transaction.resolvedBy = req.userId;
       await transaction.save();
-      
+
       return res.json({ msg: "Offer rejected and closed.", transaction });
     }
 
@@ -802,7 +820,27 @@ router.post("/checkout/:id", verifyToken, async (req, res) => {
     await awardReputation(transaction.owner, 10, "TRANSACTION_COMPLETED");
     await awardReputation(transaction.borrower, 5, "TRANSACTION_COMPLETED");
 
-    await createNotification(transaction.owner, "OFFER_ACCEPTED", "Escrow Secured 🔒", `Funds for listing are safely held in escrow. Setup pickup!`, null, "", transaction._id);
+    // Notify owner: security deposit is held, tell them to wait for borrower OTP
+    await createNotification(
+      transaction.owner,
+      "ORDER",
+      "Security Deposit Secured 🔒",
+      `The borrower has paid the security deposit for this rental. Funds are held in escrow. Head to your Orders panel — when the borrower generates their handoff OTP, you'll need to enter it there to confirm pickup.`,
+      transaction.borrower,
+      "",
+      transaction._id
+    );
+
+    // Notify borrower: payment went through, direct them to generate OTP
+    await createNotification(
+      transaction.borrower,
+      "ORDER",
+      "Payment Confirmed — Generate Your OTP 🎉",
+      `Your security deposit has been secured in escrow. Go to your Orders panel → Renting / Buying section → click "Generate Handoff OTP" to get your pickup code. Show it to the owner to receive the item.`,
+      null,
+      "",
+      transaction._id
+    );
 
     res.json({ success: true, transaction });
   } catch (err) {
@@ -837,6 +875,24 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
       return res.status(400).json({ msg: "Return OTPs can only be generated after return is initiated." });
     }
 
+    // Rate-limit: if a valid (non-expired) OTP already exists, block re-generation.
+    // This prevents duplicate notification spam without needing a separate rate-limit store.
+    const now = new Date();
+    if (otpType === "HANDOFF" && transaction.handoffOtpHash && transaction.handoffOtpExpiry && new Date(transaction.handoffOtpExpiry) > now) {
+      const expiresIn = Math.ceil((new Date(transaction.handoffOtpExpiry) - now) / 60000);
+      return res.status(429).json({
+        msg: `A handoff OTP is already active. Check your notifications. It expires in ${expiresIn} minute${expiresIn === 1 ? "" : "s"}.`,
+        expiry: transaction.handoffOtpExpiry,
+      });
+    }
+    if (otpType === "RETURN" && transaction.returnOtpHash && transaction.returnOtpExpiry && new Date(transaction.returnOtpExpiry) > now) {
+      const expiresIn = Math.ceil((new Date(transaction.returnOtpExpiry) - now) / 60000);
+      return res.status(429).json({
+        msg: `A return OTP is already active. Check your notifications. It expires in ${expiresIn} minute${expiresIn === 1 ? "" : "s"}.`,
+        expiry: transaction.returnOtpExpiry,
+      });
+    }
+
     const rawOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const hash = await bcrypt.hash(rawOtp, 10);
     const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
@@ -850,9 +906,58 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
     }
 
     await transaction.save();
-    
-    // Return OTP to generate UI QR codes/SMS triggers securely
-    res.json({ rawOtp, expiry });
+
+    // Fetch product title for notification message
+    const product = await Product.findById(transaction.product).select("title productType");
+    const productTitle = product?.title || "your item";
+    const isSecondHand = product?.productType === "SECOND_HAND";
+
+    if (otpType === "HANDOFF") {
+      // Borrower gets their OTP to show to the owner
+      await createNotification(
+        transaction.borrower,
+        "ORDER",
+        "Your Handoff OTP 🔑",
+        `Your handoff code for "${productTitle}" is: ${rawOtp}. Show this to the owner to confirm pickup. Expires in 10 minutes.`,
+        null,
+        "",
+        transaction._id
+      );
+      // Owner gets prompted to ask for the OTP
+      await createNotification(
+        transaction.owner,
+        "ORDER",
+        isSecondHand ? "Buyer Handoff Code Ready 📦" : "Borrower Handoff Code Ready 📦",
+        `${isSecondHand ? "The buyer" : "The borrower"} has generated a handoff OTP for "${productTitle}". Ask them to show you the code, then enter it in your Orders page to confirm ${isSecondHand ? "the handover" : "pickup"}.`,
+        transaction.borrower,
+        "",
+        transaction._id
+      );
+    } else {
+      // Borrower gets their return OTP to show to the owner
+      await createNotification(
+        transaction.borrower,
+        "ORDER",
+        "Your Return OTP 🔄",
+        `Your return code for "${productTitle}" is: ${rawOtp}. Show this to the owner to confirm the return. Expires in 10 minutes.`,
+        null,
+        "",
+        transaction._id
+      );
+      // Owner gets prompted to ask for the return OTP
+      await createNotification(
+        transaction.owner,
+        "ORDER",
+        "Return Code Ready — Inspect Item 🔍",
+        `The borrower has generated a return OTP for "${productTitle}". Ask them to show you the code, inspect the item, then enter the code in your Orders page to complete the return.`,
+        transaction.borrower,
+        "",
+        transaction._id
+      );
+    }
+
+    // Respond with expiry only — OTP is delivered exclusively via notification panel
+    res.json({ expiry });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -956,6 +1061,8 @@ router.post("/transaction/:id/verify-return", verifyToken, async (req, res) => {
       transaction.claimStatus = "FILED";
       await transaction.save();
       await createNotification(transaction.borrower, "DISPUTE_RAISED", "Damage Claim Submitted ⚠️", `Owner reported damage. Escrow deposit lock has been suspended.`, null, "", transaction._id);
+      // Deduct reputation from borrower when a damage claim is filed against them
+      await awardReputation(transaction.borrower, -5, "DAMAGE_CLAIM_FILED");
     } else {
       transaction.status = "SETTLED";
       transaction.escrowStatus = "RELEASED";
@@ -999,6 +1106,10 @@ router.post("/transaction/:id/dispute", verifyToken, async (req, res) => {
     transaction.disputeReason = disputeReason.trim();
     transaction.escrowStatus = "HELD_DISPUTED";
     await transaction.save();
+
+    // Deduct reputation from both parties when a dispute is escalated
+    await awardReputation(transaction.borrower, -3, "DISPUTE_RAISED");
+    await awardReputation(transaction.owner, -3, "DISPUTE_RAISED");
 
     res.json(transaction);
   } catch (err) {
@@ -1128,65 +1239,41 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
 
 // ==========================================
 // 6. MICRO-AUCTIONS HIGH-TRAFFIC BIDDING
+// Legacy endpoint — delegates to the unified auction bid handler in auctionController.
+// Phase 8: this route will be removed once the frontend migrates to /api/auctions/:id/bid
 // ==========================================
 router.post("/auction/:productId/bid", verifyToken, async (req, res) => {
-  const session = await mongoose.startSession();
   try {
-    session.startTransaction();
-
     const { amount, durationDays } = req.body;
-    const auction = await Auction.findOne({ product: req.params.productId, status: "ACTIVE" }).session(session);
+
+    // Find the active auction for this product
+    const auction = await Auction.findOne({ product: req.params.productId, status: "ACTIVE" });
     if (!auction) {
-      await session.abortTransaction();
-      return res.status(404).json({ msg: "No active micro-auction running on this listing" });
+      return res.status(404).json({ msg: "No active auction running on this listing" });
     }
 
-    if (new Date() > new Date(auction.endTime)) {
-      await session.abortTransaction();
-      return res.status(400).json({ msg: "Bidding window has expired!" });
-    }
+    // Forward to the unified bid endpoint internally by delegating to the controller logic
+    // We do this by re-using the same request pattern the new controller expects
+    req.params.id = auction._id.toString();
+    req.body.idempotencyKey = req.body.idempotencyKey ||
+      `${req.userId}_${auction._id}_${amount}_${Math.floor(Date.now() / 1000)}`;
 
-    if (amount <= auction.currentHighestBid) {
-      await session.abortTransaction();
-      return res.status(400).json({ msg: "Bid amount must be higher than current top bid" });
-    }
+    // Internal redirect — call the auction controller's bid handler via a sub-request
+    const token = req.headers['authorization'];
+    const backendUrl = `http://localhost:${process.env.PORT || 5000}/api/auctions/${auction._id}/bid`;
 
-    // Set new bid details
-    auction.currentHighestBid = amount;
-    const prevBidder = auction.highestBidderId;
-    auction.highestBidderId = req.userId;
-    await auction.save({ session });
+    const result = await axios.post(backendUrl, {
+      amount,
+      idempotencyKey: req.body.idempotencyKey,
+    }, {
+      headers: { Authorization: token },
+    });
 
-    // Persist bid to Bid collection (required by new auction architecture)
-    // Idempotency key: prevents duplicate bids if the same user submits the same amount within the same second
-    const idempotencyKey = `${req.userId}_${auction._id}_${amount}_${Math.floor(Date.now() / 1000)}`;
-    const existingBid = await Bid.findOne({ idempotencyKey }).session(session);
-    if (!existingBid) {
-      await Bid.create([{
-        auctionId: auction._id,
-        bidderId: req.userId,
-        amount,
-        idempotencyKey,
-        ipAddress: req.ip || "",
-        status: "ACCEPTED"
-      }], { session });
-    }
-
-    // Update current bid in product collection atomically
-    await Product.findByIdAndUpdate(req.params.productId, { currentBid: amount }).session(session);
-
-    await session.commitTransaction();
-    session.endSession();
-
-    if (prevBidder) {
-      await createNotification(prevBidder, "OUTBID_ALERT", "You have been outbid!", `Someone placed a higher bid on auction for ${req.params.productId}`);
-    }
-
-    res.json(auction);
+    res.json(result.data.auction || result.data);
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    res.status(500).json({ msg: err.message });
+    const status = err.response?.status || 500;
+    const msg = err.response?.data?.error || err.message;
+    res.status(status).json({ msg });
   }
 });
 

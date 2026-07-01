@@ -7,6 +7,8 @@ import {
   getAuditLogs,
   getMetrics,
   listUsers,
+  blockUser,
+  unblockUser,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -20,5 +22,7 @@ router.post("/disputes/:id/resolve", resolveDispute);
 router.get("/audit-logs", getAuditLogs);
 router.get("/metrics", getMetrics);
 router.get("/users", listUsers);
+router.post("/users/:id/block", blockUser);
+router.post("/users/:id/unblock", unblockUser);
 
 export default router;

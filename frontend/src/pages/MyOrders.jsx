@@ -177,6 +177,16 @@ export default function MyOrders() {
     }
   };
 
+  const handleCancelRequest = async (txId, isBorrower) => {
+    try {
+      await API.post(`/rent/transaction/${txId}/cancel`);
+      triggerToast("Request cancelled successfully. -3 reputation deducted.");
+      updateTxStatus(txId, "CANCELLED_BY_BORROWER", isBorrower);
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Failed to cancel request");
+    }
+  };
+
   // Messaging console helpers
   const handleLoadChat = async (txId) => {
     try {
@@ -212,6 +222,12 @@ export default function MyOrders() {
           <div>
             {rent.status === "RETRACTED"
               ? <span className="text-[10px] bg-red-500/10 text-red-400 font-bold px-2 py-0.5 rounded border border-red-500/20">RETRACTED</span>
+              : rent.status === "CANCELLED_BY_BORROWER"
+              ? <span className="text-[10px] bg-red-500/10 text-red-400 font-bold px-2 py-0.5 rounded border border-red-500/20">CANCELLED BY {rent.productType === "SECOND_HAND" ? "BUYER" : "BORROWER"}</span>
+              : rent.status === "PENDING_NEGOTIATION"
+              ? <span className="text-[10px] bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/20">⏳ Waiting for Owner Response</span>
+              : rent.status === "NEGOTIATION_DECLINED"
+              ? <span className="text-[10px] bg-slate-700/30 text-slate-400 font-bold px-2 py-0.5 rounded border border-slate-700/20">Offer Declined</span>
               : <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded border border-indigo-500/20">{rent.status}</span>
             }
             {rent.productType === "SECOND_HAND" && (
@@ -227,6 +243,39 @@ export default function MyOrders() {
           {/* ── BORROWER ACTIONS ── */}
           {isBorrowerRole && (
             <div className="flex gap-2 flex-wrap items-start">
+              {rent.status === "PENDING_NEGOTIATION" && (
+                <div className="flex gap-2 flex-wrap items-center">
+                  <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-2xl text-xs max-w-sm">
+                    <p className="font-extrabold text-amber-400 mb-1">⏳ Request Sent</p>
+                    <p className="text-slate-400">Waiting for the owner to accept or reject your offer. You'll be notified once they respond.</p>
+                  </div>
+                  <button onClick={() => handleCancelRequest(rent._id, true)} className="bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                    Cancel {rent.productType === "SECOND_HAND" ? "Buy" : "Rent"} Request
+                  </button>
+                </div>
+              )}
+              {rent.status === "AWAITING_PAYMENT" && (
+                <div className="flex gap-2 flex-wrap items-center">
+                  <button onClick={() => navigate(`/rent/checkout/${rent._id}`)} className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                    Proceed to Checkout →
+                  </button>
+                  <button onClick={() => handleCancelRequest(rent._id, true)} className="bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                    Cancel {rent.productType === "SECOND_HAND" ? "Buy" : "Rent"} Request
+                  </button>
+                </div>
+              )}
+              {rent.status === "NEGOTIATION_DECLINED" && (
+                <div className="p-3 bg-slate-700/20 border border-slate-700/30 rounded-2xl text-xs">
+                  <span className="font-extrabold text-slate-400">Offer Declined</span>
+                  <p className="text-slate-500 mt-1">The owner declined your offer. You can make a new request.</p>
+                </div>
+              )}
+              {rent.status === "CANCELLED_BY_BORROWER" && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs">
+                  <span className="font-extrabold text-red-400">✓ Request Cancelled</span>
+                  <p className="text-slate-400 mt-1">You cancelled this {rent.productType === "SECOND_HAND" ? "purchase" : "rental"} request. -3 reputation deducted.</p>
+                </div>
+              )}
               {rent.status === "RESERVED" && (
                 <div className="flex flex-col gap-1">
                   <button onClick={() => handleGenerateOtp(rent._id, "HANDOFF")} className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
@@ -251,7 +300,7 @@ export default function MyOrders() {
               {rent.status === "DAMAGE_REVIEW" && (
                 <div className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl w-full max-w-sm space-y-2">
                   <p className="text-[10px] text-yellow-400 font-extrabold uppercase">⚠️ Damage Claim Filed Against You</p>
-                  <input type="text" placeholder="Your dispute reason" value={disputeInputs[rent._id] || ""} onChange={(e) => setDisputeInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs" />
+                  <input type="text" placeholder="Your dispute reason" value={disputeInputs[rent._id] || ""} onChange={(e) => setDisputeInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
                   <button onClick={() => handleRaiseDispute(rent._id)} className="w-full bg-yellow-600 text-white text-[10px] font-bold py-2 rounded-xl">Escalate to Dispute</button>
                 </div>
               )}
@@ -264,10 +313,16 @@ export default function MyOrders() {
           {/* ── OWNER / LENDING ACTIONS ── */}
           {!isBorrowerRole && (
             <div className="flex gap-2 flex-wrap items-start">
+              {rent.status === "PENDING_NEGOTIATION" && (
+                <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-2xl text-xs max-w-sm space-y-2">
+                  <p className="font-extrabold text-amber-400">📩 New Request Received</p>
+                  <p className="text-slate-400">A borrower has made an offer. Respond from the notification panel or chat.</p>
+                </div>
+              )}
               {rent.status === "RESERVED" && (
                 <div className="flex flex-col gap-1">
                   <div className="flex gap-1.5">
-                    <input type="text" placeholder="Enter borrower's OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-36 focus:outline-none" />
+                    <input type="text" placeholder="Enter borrower's OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-36 focus:outline-none text-white placeholder-slate-400" />
                     <button onClick={() => handleVerifyOtp(rent._id, "HANDOFF", false)} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Confirm Handoff</button>
                   </div>
                   <span className="text-[9px] text-slate-500">Ask borrower to show their 🔔 code</span>
@@ -277,15 +332,15 @@ export default function MyOrders() {
                 <div className="space-y-3 w-full max-w-sm">
                   <div className="flex flex-col gap-1">
                     <div className="flex gap-1.5">
-                      <input type="text" placeholder="Enter return OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-28 focus:outline-none" />
+                      <input type="text" placeholder="Enter return OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-28 focus:outline-none text-white placeholder-slate-400" />
                       <button onClick={() => handleVerifyOtp(rent._id, "RETURN", false)} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Clean Release</button>
                     </div>
                     <span className="text-[9px] text-slate-500">Ask borrower to show their 🔔 return code</span>
                   </div>
                   <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
                     <span className="text-[10px] font-bold text-red-400 uppercase">Report Damage on Inspection</span>
-                    <input type="text" placeholder="Describe damage evidence" value={damageReports[rent._id] || ""} onChange={(e) => setDamageReports(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs" />
-                    <input type="number" placeholder="Claim Amount (₹)" value={claimAmounts[rent._id] || ""} onChange={(e) => setClaimAmounts(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs" />
+                    <input type="text" placeholder="Describe damage evidence" value={damageReports[rent._id] || ""} onChange={(e) => setDamageReports(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
+                    <input type="number" placeholder="Claim Amount (₹)" value={claimAmounts[rent._id] || ""} onChange={(e) => setClaimAmounts(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
                     <button onClick={() => handleReportDamage(rent._id)} className="w-full bg-red-600 text-white font-bold text-[10px] py-2 rounded-xl">Submit Damage Claim</button>
                   </div>
                 </div>
@@ -310,7 +365,7 @@ export default function MyOrders() {
                 </div>
               ))}
               <div className="flex gap-2 mt-2">
-                <input type="text" disabled={rent.status === "RETRACTED"} placeholder={rent.status === "RETRACTED" ? "Transaction inactive" : "Type message..."} value={chatInputs[rent._id] || ""} onChange={(e) => setChatInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs focus:outline-none disabled:opacity-50" />
+                <input type="text" disabled={rent.status === "RETRACTED"} placeholder={rent.status === "RETRACTED" ? "Transaction inactive" : "Type message..."} value={chatInputs[rent._id] || ""} onChange={(e) => setChatInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none disabled:opacity-50" />
                 <button onClick={() => handleSendChat(rent._id, otherPartyId)} disabled={rent.status === "RETRACTED"} className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs disabled:opacity-50">Send</button>
               </div>
             </div>

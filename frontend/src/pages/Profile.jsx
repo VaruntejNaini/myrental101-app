@@ -508,7 +508,7 @@ export default function Profile() {
                 onClick={() => fileInputRef.current?.click()}
                 className={`w-full py-3.5 rounded-2xl text-xs font-bold text-center border cursor-pointer transition-all ${isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-850 hover:text-indigo-400" : "bg-indigo-50/40 border-indigo-100 hover:bg-indigo-50 hover:text-indigo-600"}`}
               >
-                ≡ƒôü Upload from Device
+                <Folder className="w-4 h-4 inline mr-2" /> Upload from Device
               </button>
               
               <input 
@@ -547,7 +547,7 @@ export default function Profile() {
                 }}
                 className={`w-full py-3.5 rounded-2xl text-xs font-bold text-center border cursor-pointer transition-all ${isNight ? "bg-slate-950 border-slate-800 hover:bg-slate-850 hover:text-indigo-400" : "bg-indigo-50/40 border-indigo-100 hover:bg-indigo-50 hover:text-indigo-600"}`}
               >
-                ≡ƒô╖ Take Photo with Camera
+                <Camera className="w-4 h-4 inline mr-2" /> Take Photo with Camera
               </button>
               
               {profilePic && (
@@ -560,7 +560,7 @@ export default function Profile() {
                   }}
                   className="w-full py-3.5 bg-red-500/10 border border-red-500/25 hover:bg-red-500/20 text-red-400 rounded-2xl text-xs font-bold text-center cursor-pointer transition-all"
                 >
-                  ≡ƒùæ∩╕Å Remove Current Photo
+                  <Trash2 className="w-4 h-4 inline mr-2" /> Remove Current Photo
                 </button>
               )}
               
@@ -648,7 +648,7 @@ export default function Profile() {
                     }}
                     className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-bold hover:scale-102 transition-all cursor-pointer shadow-lg"
                   >
-                    ≡ƒô╕ Capture Photo
+                    <Camera className="w-4 h-4 inline mr-2" /> Capture Photo
                   </button>
                 </div>
               </div>
@@ -774,7 +774,7 @@ export default function Profile() {
                           API.put("/auth/profile", { profilePic: croppedUrl })
                             .catch(err => console.error("Error saving profile pic to backend:", err));
                           setShowCropModal(false);
-                          setShowNotification("Avatar cropped and updated successfully! ≡ƒÄë");
+                          setShowNotification("Avatar updated successfully.");
                         }
                       };
                       img.src = rawImage;
@@ -793,9 +793,9 @@ export default function Profile() {
       {/* Floating Modern Toast Notification */}
       {showNotification && (
         <div className="fixed bottom-6 left-6 z-[110] flex items-center gap-3 bg-slate-950 border border-indigo-500/30 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-[0_12px_40px_rgba(99,102,241,0.2)] animate-slide-in">
-          <span className="text-indigo-400 font-black">≡ƒöö Alert:</span>
+          <span className="text-indigo-400 font-black flex items-center gap-1.5"><Bell className="w-3.5 h-3.5" /> Alert:</span>
           <span>{showNotification}</span>
-          <button onClick={() => setShowNotification("")} className="ml-3 text-slate-400 hover:text-white font-extrabold">Γ£ò</button>
+          <button onClick={() => setShowNotification("")} className="ml-3 text-slate-400 hover:text-white font-extrabold"><X className="w-3.5 h-3.5" /></button>
         </div>
       )}
     </div>

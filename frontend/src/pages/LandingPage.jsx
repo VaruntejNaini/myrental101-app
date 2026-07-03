@@ -9,7 +9,7 @@ import NotificationBell from "../components/NotificationBell";
 import ChatBell from "../components/ChatBell";
 import Footer from "../components/Footer";
 import { AuctionCreationModal } from "../components/Auction/AuctionCreationModal";
-import { ShieldCheck, PackagePlus, MessageSquare, Lock } from "lucide-react";
+import { ShieldCheck, PackagePlus, MessageSquare, Lock, Edit2 } from "lucide-react";
 
 // ── Floating particles ──────────────────────────────────────────────────────
 const Particle = ({ style }) => (
@@ -72,7 +72,7 @@ const getImageUrl = (image) => {
 };
 
 // ── Premium Product Card with Image Slider & Emojis ─────────────────────────
-const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct, currentUser, onDeleteWish, onOpenInsights }) => {
+const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClick, userCoords, coordsLoading, coordsError, isOwnerCard = false, onToggleStatus, onDeleteProduct, onEditProduct, currentUser, onDeleteWish, onOpenInsights }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const [isDeletingWish, setIsDeletingWish] = useState(false);
   const cardRef = useRef(null);
@@ -478,6 +478,18 @@ const ProductCard = ({ item, isNight, isBookmarked, onBookmarkToggle, onCardClic
               >
                 🗑️
               </button>
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditProduct?.(item);
+                }}
+                className="bg-violet-500/10 hover:bg-violet-500/20 text-violet-500 border border-violet-500/25 p-2 rounded-xl text-xs font-black active:scale-95 transition-all cursor-pointer flex items-center justify-center aspect-square"
+                aria-label="Edit listing"
+                title="Edit listing"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
             </div>
           ) : isWishOwner ? (
             <>
@@ -541,6 +553,7 @@ export default function Dashboard() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [insightsModalOpen, setInsightsModalOpen] = useState(false);
   const [insightsProduct, setInsightsProduct] = useState(null);
   const [insightsData, setInsightsData] = useState(null);
@@ -687,6 +700,11 @@ export default function Dashboard() {
       console.error("Error deleting product:", err);
       setShowNotification("Failed to delete listing.");
     }
+  };
+
+  const handleEditProduct = (product) => {
+    setEditingProduct(product);
+    setPostModalOpen(true);
   };
 
   const handleDeleteWish = async (wishId) => {
@@ -1397,9 +1415,12 @@ export default function Dashboard() {
               <ProductCard 
                 key={item._id} 
                 item={{
+                  _id: item._id,
                   id: item._id,
                   title: item.title,
                   price: item.rentalPrice,
+                  rentalPrice: item.rentalPrice,
+                  description: item.description,
                   emoji: "💻",
                   owner: "You",
                   area: item.area,
@@ -1424,9 +1445,9 @@ export default function Dashboard() {
                 isOwnerCard={true}
                 onToggleStatus={handleToggleStatus}
                 onDeleteProduct={handleDeleteProduct}
+                onEditProduct={handleEditProduct}
                 onOpenInsights={handleOpenInsights}
                 currentUser={currentUser}
-                
               />
             ))}
             
@@ -2032,11 +2053,16 @@ export default function Dashboard() {
         {/* Post Product Modal */}
         <PostProductModal
           isOpen={postModalOpen}
-          onClose={() => setPostModalOpen(false)}
+          onClose={() => {
+            setPostModalOpen(false);
+            setEditingProduct(null);
+          }}
+          initialProduct={editingProduct}
           isNight={isNight}
-          onProductCreated={() => {
+          onProductChanged={() => {
             syncProducts();
-            triggerToast("Product listing published successfully! 🚀");
+            const msg = editingProduct ? "Listing updated successfully! 📝" : "Product listing published successfully! 🚀";
+            triggerToast(msg);
           }}
         />
 

@@ -245,37 +245,32 @@ export default function ProductDetailPage() {
     if (!product) return;
     if (product.productType === "SECOND_HAND") {
       try {
-        const res = await API.post("/rent/negotiate", {
+        await API.post("/rent/negotiate", {
           productId: id,
           startDate: new Date(),
           endDate: new Date(),
           dailyRate: product.rentalPrice,
           securityDeposit: 0
         });
-        triggerToast(`Purchase request for ${product.title} submitted! Checkout pending.`);
-        setTimeout(() => navigate(`/rent/checkout/${id}`), 1500);
+        triggerToast(`Purchase request sent! Waiting for ${product.owner?.name || "the owner"} to respond.`);
+        setTimeout(() => navigate("/orders"), 1500);
       } catch (err) {
         triggerToast(err.response?.data?.msg || "Purchase request failed");
       }
     } else {
-      // Direct standard lease creation
       try {
-        const res = await API.post("/rent/negotiate", {
+        await API.post("/rent/negotiate", {
           productId: id,
           startDate: new Date(),
           endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
           dailyRate: product.rentalPrice,
           securityDeposit: product.securityDeposit
         });
-        
-        // Save details inside Session Storage for checkout
         sessionStorage.setItem("rental_start", new Date().toLocaleDateString());
         sessionStorage.setItem("rental_end", new Date(Date.now() + duration * 24 * 60 * 60 * 1000).toLocaleDateString());
         sessionStorage.setItem("rental_days", duration.toString());
-        sessionStorage.setItem("rental_addons", JSON.stringify([]));
-
-        triggerToast(`Rental configuration locked. Proceeding to payment Checkout!`);
-        setTimeout(() => navigate(`/rent/checkout/${id}`), 1500);
+        triggerToast(`Rental request sent! Waiting for ${product.owner?.name || "the owner"} to respond.`);
+        setTimeout(() => navigate("/orders"), 1500);
       } catch (err) {
         triggerToast(err.response?.data?.msg || "Rental request failed");
       }

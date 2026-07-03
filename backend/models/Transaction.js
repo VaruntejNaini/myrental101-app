@@ -25,11 +25,16 @@ const transactionSchema = new mongoose.Schema(
         "DISPUTED",
         "SETTLED",
         "RETRACTED",
+        "CANCELLED_BY_BORROWER",
       ],
       default: "PENDING_NEGOTIATION",
       index: true,
     },
     retractedAt: {
+      type: Date,
+      default: null,
+    },
+    cancelledAt: {
       type: Date,
       default: null,
     },

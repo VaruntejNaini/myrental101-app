@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, X, Activity, Mail, Phone } from "lucide-react";
+import { Bell, X, Activity, Mail, Phone, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import API from "../api";
 
 export default function NotificationDrawer({ isOpen, onClose }) {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -166,15 +168,29 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 ORDER: "border-l-emerald-500 border-emerald-500/15 bg-emerald-500/5 dark:border-emerald-500/25 dark:bg-emerald-500/10",
                 SYSTEM: "border-l-amber-500 border-amber-500/15 bg-amber-500/5 dark:border-amber-500/25 dark:bg-amber-500/10",
                 OFFER_RETRACTED: "border-l-rose-500 border-rose-500/15 bg-rose-500/5 dark:border-rose-500/25 dark:bg-rose-500/10",
+                OTP_HANDOFF: "border-l-violet-500 border-violet-500/15 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/10",
+                OTP_RETURN: "border-l-violet-500 border-violet-500/15 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/10",
               };
               const emojiMap = {
                 NEGOTIATION: "💬",
                 ORDER: "📦",
                 SYSTEM: "🔔",
                 OFFER_RETRACTED: "🚫",
+                OTP_HANDOFF: "🔑",
+                OTP_RETURN: "🔄",
+              };
+              const labelMap = {
+                NEGOTIATION: "NEGOTIATION",
+                ORDER: "ORDER",
+                SYSTEM: "SYSTEM",
+                OFFER_RETRACTED: "Offer Retracted",
+                OTP_HANDOFF: "Handoff Code",
+                OTP_RETURN: "Return Code",
               };
 
-              // Detect if this notification contains an OTP code
+              const isOtpNotif = notif.type === "OTP_HANDOFF" || notif.type === "OTP_RETURN";
+
+              // Detect embedded OTP code for display
               const otpMatch = notif.message.match(/(?:code|OTP|is):\s*(\d{6})/i);
               const embeddedOtp = otpMatch ? otpMatch[1] : null;
               return (
@@ -187,7 +203,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                   <div className="flex justify-between items-start gap-2">
                     <span className="text-xs font-black uppercase tracking-wider text-slate-450 flex items-center gap-1.5">
                       <span>{emojiMap[notif.type]}</span>
-                      {notif.type === "OFFER_RETRACTED" ? "Offer Retracted" : notif.type}
+                      {labelMap[notif.type] || notif.type}
                     </span>
                     <button
                       onClick={() => handleMarkAsRead(notif._id)}
@@ -262,12 +278,25 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                                 </button>
                               </div>
                             )}
-                            <button
-                              onClick={() => handleClearTransactionNotifications(txId, notif.sender, notif.message)}
-                              className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
-                            >
-                              💬 CHAT NOW
-                            </button>
+                            {isOtpNotif ? (
+                              <button
+                                onClick={async () => {
+                                  await handleMarkAsRead(notif._id);
+                                  navigate("/orders");
+                                  onClose();
+                                }}
+                                className="w-full py-1.5 px-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
+                              >
+                                <ArrowRight className="w-3 h-3" /> Go to Your Orders Page
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleClearTransactionNotifications(txId, notif.sender, notif.message)}
+                                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
+                              >
+                                💬 CHAT NOW
+                              </button>
+                            )}
                           </div>
                         )}
                       </>

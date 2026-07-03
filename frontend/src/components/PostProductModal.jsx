@@ -55,7 +55,7 @@ const validateImages = (filesArray) => {
   return "";
 };
 
-export default function PostProductModal({ isOpen, onClose, isNight, onProductCreated }) {
+export default function PostProductModal({ isOpen, onClose, initialProduct, isNight, onProductChanged }) {
   const [productType, setProductType] = useState("RENT"); // RENT or SECOND_HAND
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Electronics");
@@ -66,10 +66,15 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
   const [description, setDescription] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]); // Array of raw File objects
   const [previewUrls, setPreviewUrls] = useState([]); // Array of Object URLs for display
+  const [existingImages, setExistingImages] = useState([]); // Retained images from edit
   const [showDepositInfo, setShowDepositInfo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [duplicateError, setDuplicateError] = useState("");
+
+  // Derived from props (not state)
+  const isEditMode = Boolean(initialProduct);
+  const effectiveProductType = isEditMode ? initialProduct.productType : productType;
 
   // Address Selection States
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -105,8 +110,8 @@ export default function PostProductModal({ isOpen, onClose, isNight, onProductCr
     address: !isManualLocation && !selectedAddressId ? "Please select a saved address before publishing." : "",
     description: validateDescription(description),
     rentalPrice: validatePrice(rentalPrice),
-    securityDeposit: validateDeposit(securityDeposit, productType === "RENT"),
-    images: validateImages(selectedFiles)
+    securityDeposit: validateDeposit(securityDeposit, effectiveProductType === "RENT"),
+    images: isEditMode ? "" : validateImages(selectedFiles) // In edit mode, combined existing+new must be >= 1
   };
 
 const isPublishDisabled =
@@ -134,15 +139,45 @@ const isPublishDisabled =
     };
   }, []);
 
-  // Handle resets on listing type change
+  // Handle resets on listing type change (CREATE mode only)
   useEffect(() => {
+    if (isEditMode) return; // Skip in edit mode; type is locked
     setTouched(prev => ({ ...prev, securityDeposit: false }));
     if (productType === "SECOND_HAND") {
       setSecurityDeposit("");
     } else if (productType === "RENT" && rentalPrice && !isNaN(rentalPrice)) {
       setSecurityDeposit(Math.round(Number(rentalPrice) * 2.5));
     }
-  }, [productType]);
+  }, [productType, isEditMode]);
+
+  // Initialize form when modal opens or product selection changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (isEditMode) {
+      // EDIT MODE: Prefill from initialProduct
+      setTitle(initialProduct.title || "");
+      setDescription(initialProduct.description || "");
+      setCategory(initialProduct.category || "Electronics");
+      setRentalPrice(String(initialProduct.rentalPrice) || "");
+      setSecurityDeposit(initialProduct.productType === "RENT" ? String(initialProduct.securityDeposit) || "" : "");
+      setExistingImages(initialProduct.images || []);
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+    } else {
+      // CREATE MODE: Reset form (but keep productType for RENT/SELL toggle)
+      setTitle("");
+      setDescription("");
+      setCategory("Electronics");
+      setRentalPrice("");
+      setSecurityDeposit("");
+      setExistingImages([]);
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+    }
+
+    fetchListingAddresses();
+  }, [isOpen, initialProduct]);
 
   const fetchListingAddresses = () => {
     if (!isOpen) return;
@@ -217,6 +252,7 @@ const isPublishDisabled =
     previewUrls.forEach(url => URL.revokeObjectURL(url));
     setSelectedFiles([]);
     setPreviewUrls([]);
+    setExistingImages([]);
     setError("");
     setDuplicateError("");
     setTouched({
@@ -307,6 +343,11 @@ const isPublishDisabled =
     setDuplicateError("");
   };
 
+  const removeExistingImage = (indexToRemove) => {
+    setExistingImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setError("");
+  };
+
   const handleNumericKeyDown = (e) => {
     if (["e", "E", "+", "-"].includes(e.key)) {
       e.preventDefault();
@@ -317,12 +358,25 @@ const handleSubmit = async (e) => {
   e.preventDefault();
   setSubmitAttempted(true);
 
+  // In edit mode, check combined image count
+  if (isEditMode) {
+    const totalImages = existingImages.length + previewUrls.length;
+    if (totalImages < 1) {
+      setError("At least 1 image is required. You have 0.");
+      return;
+    }
+    if (totalImages > 5) {
+      setError(`Maximum 5 images allowed. You have ${totalImages}.`);
+      return;
+    }
+  }
+
   const hasErrors = Object.values(errors).some(Boolean);
   if (hasErrors) {
     // Find first invalid field in form order and focus it
     if (errors.title) titleRef.current?.focus();
     else if (errors.rentalPrice) priceRef.current?.focus();
-    else if (productType === "RENT" && errors.securityDeposit) depositRef.current?.focus();
+    else if (effectiveProductType === "RENT" && errors.securityDeposit) depositRef.current?.focus();
     else if (!isManualLocation && errors.address) {
       addressContainerRef.current?.focus();
       addressContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -343,8 +397,8 @@ const handleSubmit = async (e) => {
     formData.append("description", description.trim());
     formData.append("category", category);
     formData.append("rentalPrice", rentalPrice);
-    formData.append("securityDeposit", productType === "RENT" ? securityDeposit : 0);
-    formData.append("productType", productType);
+    formData.append("securityDeposit", effectiveProductType === "RENT" ? securityDeposit : 0);
+    formData.append("productType", effectiveProductType);
 
     const activeAddress = !isManualLocation && selectedAddressId
       ? savedAddresses.find(a => a._id === selectedAddressId)
@@ -363,47 +417,36 @@ const handleSubmit = async (e) => {
       formData.append("longitude", activeAddress.longitude);
     }
 
+    // Add new files
     selectedFiles.forEach((file) => {
       formData.append("productImages", file);
     });
 
-    await API.post("/rent/products", formData);
+    // In edit mode, include retained existing images
+    if (isEditMode) {
+      formData.append("retainedExistingImages", JSON.stringify(existingImages));
+    }
+
+    // POST for create, PATCH for edit
+    if (isEditMode) {
+      await API.patch(`/rent/products/${initialProduct._id}`, formData);
+    } else {
+      await API.post("/rent/products", formData);
+    }
 
     setIsSubmitting(false);
 
-    // Reset state and revoke URLs
-    previewUrls.forEach(url => URL.revokeObjectURL(url));
-    setTitle("");
-    setRentalPrice("");
-    setSecurityDeposit("");
-    setArea("");
-    setDescription("");
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    setDuplicateError("");
-    setTouched({
-      title: false,
-      city: false,
-      area: false,
-      description: false,
-      rentalPrice: false,
-      securityDeposit: false
-    });
-    setSubmitAttempted(false);
-    setSelectedAddressId(null);
-    setIsManualLocation(false);
-    setSavedAddresses([]);
-
-    if (onProductCreated) onProductCreated();
-    onClose();
+    // Success: Call callback then reset via handleClose
+    if (onProductChanged) onProductChanged();
+    handleClose();
   } catch (err) {
-    console.error("Post product error:", err.response?.data || err);
+    console.error("Product submission error:", err.response?.data || err);
     setIsSubmitting(false);
     setError(
       err.response?.data?.msg ||
       err.response?.data?.message ||
       JSON.stringify(err.response?.data) ||
-      "Failed to post product listing."
+      "Failed to save product listing."
     );
   }
 };
@@ -426,46 +469,55 @@ const handleSubmit = async (e) => {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6 pr-6">
           <div>
             <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
-              {productType === "RENT" ? (
+              {effectiveProductType === "RENT" ? (
                 <>
                   <Rocket className="w-6 h-6 text-indigo-500" />
-                  <span>List Item for Rent</span>
+                  <span>{isEditMode ? "Edit Rental Listing" : "List Item for Rent"}</span>
                 </>
               ) : (
                 <>
                   <Handshake className="w-6 h-6 text-violet-500" />
-                  <span>List Second-Hand Sale</span>
+                  <span>{isEditMode ? "Edit Sale Listing" : "List Second-Hand Sale"}</span>
                 </>
               )}
             </h2>
-            <p className="text-xs text-slate-450">List your gear for the community to browse</p>
+            <p className="text-xs text-slate-450">{isEditMode ? "Update your listing details" : "List your gear for the community to browse"}</p>
           </div>
 
-          {/* Compact Rent/Sell Switch */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 self-start sm:self-auto shadow-inner">
-            <button
-              type="button"
-              onClick={() => setProductType("RENT")}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                productType === "RENT" 
-                  ? "bg-indigo-500 text-white shadow-sm" 
-                  : "text-slate-405 hover:text-slate-200"
-              }`}
-            >
-              Rent
-            </button>
-            <button
-              type="button"
-              onClick={() => setProductType("SECOND_HAND")}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                productType === "SECOND_HAND" 
-                  ? "bg-emerald-500 text-white shadow-sm" 
-                  : "text-slate-405 hover:text-slate-200"
-              }`}
-            >
-              Sell
-            </button>
-          </div>
+          {/* Compact Rent/Sell Switch - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 self-start sm:self-auto shadow-inner">
+              <button
+                type="button"
+                onClick={() => setProductType("RENT")}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  productType === "RENT" 
+                    ? "bg-indigo-500 text-white shadow-sm" 
+                    : "text-slate-405 hover:text-slate-200"
+                }`}
+              >
+                Rent
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductType("SECOND_HAND")}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  productType === "SECOND_HAND" 
+                    ? "bg-emerald-500 text-white shadow-sm" 
+                    : "text-slate-405 hover:text-slate-200"
+                }`}
+              >
+                Sell
+              </button>
+            </div>
+          )}
+
+          {/* Product type badge in edit mode */}
+          {isEditMode && (
+            <div className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider self-start sm:self-auto bg-slate-700 text-slate-200">
+              {effectiveProductType === "RENT" ? "🔴 Rental" : "🟢 Sale"}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -527,7 +579,7 @@ const handleSubmit = async (e) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block mb-1.5 uppercase tracking-wider text-slate-400 text-[9px] font-black">
-                {productType === "RENT" ? "Daily Rate (₹/day) *" : "Selling Price (₹) *"}
+                {effectiveProductType === "RENT" ? "Daily Rate (₹/day) *" : "Selling Price (₹) *"}
               </label>
               <div className="relative">
                 <input 
@@ -551,7 +603,7 @@ const handleSubmit = async (e) => {
               )}
             </div>
 
-            {productType === "RENT" && (
+            {effectiveProductType === "RENT" && (
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="uppercase tracking-wider text-slate-400 text-[9px] font-black">Security Deposit (₹) *</label>
@@ -588,7 +640,7 @@ const handleSubmit = async (e) => {
           </div>
 
           {/* Deposit Explanation banner */}
-          {productType === "RENT" && showDepositInfo && (
+          {effectiveProductType === "RENT" && showDepositInfo && (
             <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-[11px] leading-relaxed text-slate-300">
               <span className="font-extrabold block mb-1 flex items-center gap-1">
                 <Lock className="w-3.5 h-3.5 text-indigo-400" /> Why requires a security deposit?
@@ -788,11 +840,40 @@ const handleSubmit = async (e) => {
           {/* Product Image File Upload */}
           <div>
             <label className="block mb-1.5 uppercase tracking-wider text-slate-400 text-[9px] font-black">
-              Product Images ({selectedFiles.length}/5)
+              Product Images ({existingImages.length + selectedFiles.length}/5)
             </label>
+            
+            {/* Existing Images (Edit Mode) */}
+            {isEditMode && existingImages.length > 0 && (
+              <div className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+                <p className="text-[9px] text-slate-400 font-semibold mb-2 uppercase">Retained Images</p>
+                <div className="flex flex-wrap gap-4">
+                  {existingImages.map((img, idx) => {
+                    const imgUrl = typeof img === "string" ? img : (img.url || "");
+                    return (
+                      <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow group">
+                        <img 
+                          src={imgUrl} 
+                          alt={`Existing ${idx + 1}`} 
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105" 
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => removeExistingImage(idx)} 
+                          className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black cursor-pointer shadow-md transition-all z-10"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-4 p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/20">
               
-              {/* Thumbnail Previews */}
+              {/* Thumbnail Previews (New Files) */}
               {previewUrls.map((url, idx) => (
                 <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow group">
                   <img 
@@ -811,7 +892,7 @@ const handleSubmit = async (e) => {
               ))}
 
               {/* Add Photo Button (only shows if total < 5) */}
-              {selectedFiles.length < 5 && (
+              {existingImages.length + selectedFiles.length < 5 && (
                 <button
                   type="button"
                   onClick={() => document.getElementById("product-image-upload").click()}
@@ -851,13 +932,23 @@ const handleSubmit = async (e) => {
             className={`w-full mt-4 text-white font-extrabold text-xs py-3.5 rounded-2xl shadow-lg transition-transform flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
               isPublishDisabled ? "" : "hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             } ${
-              productType === "RENT" ? "bg-gradient-to-r from-indigo-500 to-violet-600" : "bg-gradient-to-r from-emerald-500 to-teal-600"
+              effectiveProductType === "RENT" ? "bg-gradient-to-r from-indigo-500 to-violet-600" : "bg-gradient-to-r from-emerald-500 to-teal-600"
             }`}
           >
             {isSubmitting ? (
-              <span className="flex items-center gap-1.5 animate-pulse"><UploadCloud className="w-4 h-4 animate-bounce" /> Uploading Images & Publishing...</span>
+              <span className="flex items-center gap-1.5 animate-pulse"><UploadCloud className="w-4 h-4 animate-bounce" /> {isEditMode ? "Updating Listing..." : "Uploading Images & Publishing..."}</span>
             ) : (
-              <span className="flex items-center gap-1.5"><Rocket className="w-4 h-4" /> Publish Listing</span>
+              <span className="flex items-center gap-1.5">
+                {isEditMode ? (
+                  <>
+                    <Edit2 className="w-4 h-4" /> Update Listing
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" /> Publish Listing
+                  </>
+                )}
+              </span>
             )}
           </button>
 

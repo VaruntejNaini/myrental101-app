@@ -321,7 +321,9 @@ router.get("/products", async (req, res) => {
 // Get User's Own Listed Products
 router.get("/products/me", verifyToken, async (req, res) => {
   try {
-    const products = await Product.find({ owner: req.userId }).populate("owner", "name email");
+    const products = await Product.find({ owner: req.userId })
+      .sort({ createdAt: -1 })
+      .populate("owner", "name email");
     const resolvedProducts = await resolveProductStatuses(products, req.userId);
     res.json(resolvedProducts);
   } catch (err) {
@@ -586,6 +588,206 @@ router.delete("/products/:id", verifyToken, async (req, res) => {
 });
 
 // ==========================================
+// 1B. EDIT PRODUCT LISTING (PATCH)
+// ==========================================
+
+router.patch("/products/:id", verifyToken, upload.array("productImages", 5), async (req, res) => {
+  const uploadedAssets = [];
+  try {
+    // 1. Validate Product ID format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ msg: "Invalid product ID format." });
+    }
+
+    // 2. Fetch existing Product
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ msg: "Product listing not found." });
+    }
+
+    // 3. Verify ownership
+    if (product.owner.toString() !== req.userId) {
+      return res.status(403).json({ msg: "Unauthorized: You do not own this listing." });
+    }
+
+    // 4. Extract editable fields
+    const { 
+      title, 
+      description, 
+      category, 
+      rentalPrice, 
+      securityDeposit, 
+      city, 
+      area, 
+      latitude, 
+      longitude,
+      retainedExistingImages
+    } = req.body;
+
+    // 5. Parse and validate retained images
+    let validatedRetainedImages = [];
+    try {
+      const retainedParsed = retainedExistingImages ? JSON.parse(retainedExistingImages) : [];
+      const currentPublicIds = (product.images || []).map(img => img.publicId);
+      
+      // Authorize each retained image against product.images
+      for (const retainedImg of retainedParsed) {
+        if (!currentPublicIds.includes(retainedImg.publicId)) {
+          return res.status(400).json({ msg: "Authorization failed: one or more images do not belong to this listing." });
+        }
+      }
+      validatedRetainedImages = retainedParsed;
+    } catch (err) {
+      return res.status(400).json({ msg: "Invalid retained images format." });
+    }
+
+    // 6. Validate editable fields using existing validators
+    if (title && title.trim()) {
+      if (title.trim().length < 3 || title.trim().length > 80) {
+        return res.status(400).json({ msg: "Title must be 3-80 characters." });
+      }
+    }
+
+    if (description && description.trim()) {
+      if (description.trim().length < 20 || description.trim().length > 2000) {
+        return res.status(400).json({ msg: "Description must be 20-2000 characters." });
+      }
+    }
+
+    if (rentalPrice !== undefined && rentalPrice !== null) {
+      if (Number(rentalPrice) < 1) {
+        return res.status(400).json({ msg: "Price must be greater than ₹0." });
+      }
+    }
+
+    if (product.productType === "RENT") {
+      if (securityDeposit !== undefined && securityDeposit !== null) {
+        if (Number(securityDeposit) < 0) {
+          return res.status(400).json({ msg: "Security deposit cannot be negative." });
+        }
+      }
+    }
+
+    // 7. Upload new files to Cloudinary
+    if (req.files && req.files.length > 0) {
+      const folder = product.productType === "RENT" ? "rentit/rent" : "rentit/secondhand";
+      for (const file of req.files) {
+        try {
+          const result = await uploadToCloudinary(file.buffer, folder);
+          uploadedAssets.push({ url: result.secure_url, publicId: result.public_id });
+        } catch (uploadErr) {
+          // Rollback on first failed upload
+          for (const asset of uploadedAssets) {
+            const publicId = getImagePublicId(asset);
+            if (publicId) {
+              await cloudinary.uploader.destroy(publicId).catch(rollbackErr => {
+                console.error(`Rollback error destroying asset ${publicId}:`, rollbackErr);
+              });
+            }
+          }
+          return res.status(400).json({ msg: `Image upload failed: ${uploadErr.message}` });
+        }
+      }
+    }
+
+    // 8. Check total image count
+    const totalImageCount = validatedRetainedImages.length + uploadedAssets.length;
+    if (totalImageCount < 1) {
+      // Rollback uploads
+      for (const asset of uploadedAssets) {
+        const publicId = getImagePublicId(asset);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId).catch(rollbackErr => {
+            console.error(`Rollback error destroying asset ${publicId}:`, rollbackErr);
+          });
+        }
+      }
+      return res.status(400).json({ msg: "At least 1 image is required." });
+    }
+    if (totalImageCount > 5) {
+      // Rollback uploads
+      for (const asset of uploadedAssets) {
+        const publicId = getImagePublicId(asset);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId).catch(rollbackErr => {
+            console.error(`Rollback error destroying asset ${publicId}:`, rollbackErr);
+          });
+        }
+      }
+      return res.status(400).json({ msg: `Maximum 5 images allowed. You have ${totalImageCount}.` });
+    }
+
+    // 9. Build final images array
+    const finalImages = [...validatedRetainedImages, ...uploadedAssets];
+
+    // 10. Update Product document
+    const updateData = {};
+    if (title !== undefined && title !== null) updateData.title = title.trim();
+    if (description !== undefined && description !== null) updateData.description = description.trim();
+    if (category !== undefined && category !== null) updateData.category = category;
+    if (rentalPrice !== undefined && rentalPrice !== null) updateData.rentalPrice = Number(rentalPrice);
+    
+    if (product.productType === "RENT") {
+      if (securityDeposit !== undefined && securityDeposit !== null) {
+        updateData.securityDeposit = Number(securityDeposit);
+      }
+    }
+
+    if (city !== undefined && city !== null) updateData.city = city.trim();
+    if (area !== undefined && area !== null) updateData.area = area.trim();
+    updateData.images = finalImages;
+
+    // Handle location update
+    if (latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
+      const latNum = Number(latitude);
+      const lngNum = Number(longitude);
+      if (!isNaN(latNum) && !isNaN(lngNum)) {
+        updateData.location = {
+          type: "Point",
+          coordinates: [lngNum, latNum]
+        };
+      }
+    }
+
+    try {
+      const updatedProduct = await Product.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true }
+      );
+
+      // 11. ON SUCCESS: Determine removed images and delete from Cloudinary (best-effort)
+      const originalPublicIds = (product.images || []).map(img => img.publicId);
+      const retainedPublicIds = validatedRetainedImages.map(img => img.publicId);
+      const removedPublicIds = originalPublicIds.filter(id => !retainedPublicIds.includes(id));
+
+      for (const removedId of removedPublicIds) {
+        cloudinary.uploader.destroy(removedId).catch(deleteErr => {
+          console.error(`Best-effort Cloudinary cleanup failed for ${removedId}:`, deleteErr);
+          // Don't fail the response; log and continue
+        });
+      }
+
+      res.json(updatedProduct);
+    } catch (updateErr) {
+      // ON FAILURE: Rollback newly uploaded Cloudinary assets
+      for (const asset of uploadedAssets) {
+        const publicId = getImagePublicId(asset);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId).catch(rollbackErr => {
+            console.error(`Rollback error destroying asset ${publicId}:`, rollbackErr);
+          });
+        }
+      }
+      throw updateErr;
+    }
+  } catch (err) {
+    console.error("CRITICAL ERROR IN PATCH /products/:id:", err);
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// ==========================================
 // 2. STANDARD NEGOTIATION FLOW
 // ==========================================
 
@@ -778,6 +980,87 @@ router.post("/negotiate/:id/resolve", verifyToken, async (req, res) => {
 
     res.json(transaction);
   } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// ==========================================
+// 2B. CANCEL TRANSACTION BY BORROWER/BUYER
+// ==========================================
+router.post("/transaction/:id/cancel", verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const transaction = await Transaction.findById(req.params.id).session(session).populate("product");
+    if (!transaction) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ msg: "Transaction not found" });
+    }
+
+    // Only borrower/buyer can cancel their own request
+    if (transaction.borrower.toString() !== req.userId) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({ msg: "Unauthorized: Only the borrower can cancel their request." });
+    }
+
+    // Check if already cancelled (idempotency)
+    if (transaction.status === "CANCELLED_BY_BORROWER") {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(200).json({ msg: "Transaction already cancelled." });
+    }
+
+    // Only allow cancellation from these states
+    const cancellableStatuses = ["PENDING_NEGOTIATION", "AWAITING_PAYMENT"];
+    if (!cancellableStatuses.includes(transaction.status)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({ msg: `Cannot cancel transaction in ${transaction.status} status. Cancellations are only allowed before payment confirmation.` });
+    }
+
+    // Update transaction status and set cancelledAt
+    transaction.status = "CANCELLED_BY_BORROWER";
+    transaction.cancelledAt = new Date();
+    await transaction.save({ session });
+
+    // Award -3 reputation to borrower (idempotent due to cancelledAt check above)
+    await awardReputation(transaction.borrower, -3, "REQUEST_CANCELLED");
+
+    // Notify owner
+    const borrowerUser = await User.findById(transaction.borrower).session(session);
+    const borrowerName = borrowerUser?.name || "A borrower";
+    const productTitle = transaction.product?.title || "Product";
+    const isSecondHand = transaction.product?.productType === "SECOND_HAND";
+    
+    const notifTitle = isSecondHand ? "Purchase Request Cancelled" : "Rental Request Cancelled";
+    const notifMsg = isSecondHand
+      ? `${borrowerName} has cancelled their purchase request for "${productTitle}".`
+      : `${borrowerName} has cancelled their rental request for "${productTitle}".`;
+
+    await createNotification(
+      transaction.owner,
+      "REQUEST_CANCELLED",
+      notifTitle,
+      notifMsg,
+      transaction.borrower,
+      `/orders`,
+      transaction._id,
+      session
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      msg: "Request cancelled successfully. -3 reputation deducted.",
+      transaction
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Error cancelling transaction:", err);
     res.status(500).json({ msg: err.message });
   }
 });

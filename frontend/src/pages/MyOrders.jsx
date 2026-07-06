@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Search } from "lucide-react";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
 
@@ -7,6 +8,7 @@ export default function MyOrders() {
   const navigate = useNavigate();
   const [isNight] = useState(() => localStorage.getItem("theme") === "night");
   const [showNotification, setShowNotification] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // current logged-in user id — used to split renting vs lending
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -18,6 +20,7 @@ export default function MyOrders() {
 
   // OTP verify input mapped by txId (owner uses this to type in the code)
   const [verifyOtpInput, setVerifyOtpInput] = useState({});
+  const [pendingCancelTxIds, setPendingCancelTxIds] = useState({});
 
   // Chat context maps
   const [chats, setChats] = useState({});
@@ -33,6 +36,28 @@ export default function MyOrders() {
   const triggerToast = (msg) => {
     setShowNotification(msg);
     setTimeout(() => setShowNotification(""), 4000);
+  };
+
+  const filterTransactions = (items) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return items;
+
+    return items.filter((item) => {
+      const haystack = [
+        item.title,
+        item._id,
+        item.status,
+        item.productType,
+        item.borrower?.name,
+        item.owner?.name,
+        item.rate,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
   };
 
   // Fetch current user id + split transactions into renting / lending
@@ -178,12 +203,20 @@ export default function MyOrders() {
   };
 
   const handleCancelRequest = async (txId, isBorrower) => {
+    if (pendingCancelTxIds[txId]) return;
+    setPendingCancelTxIds(prev => ({ ...prev, [txId]: true }));
     try {
       await API.post(`/rent/transaction/${txId}/cancel`);
       triggerToast("Request cancelled successfully. -3 reputation deducted.");
       updateTxStatus(txId, "CANCELLED_BY_BORROWER", isBorrower);
     } catch (err) {
       triggerToast(err.response?.data?.msg || "Failed to cancel request");
+    } finally {
+      setPendingCancelTxIds(prev => {
+        const next = { ...prev };
+        delete next[txId];
+        return next;
+      });
     }
   };
 
@@ -278,8 +311,18 @@ export default function MyOrders() {
               )}
               {rent.status === "RESERVED" && (
                 <div className="flex flex-col gap-1">
-                  <button onClick={() => handleGenerateOtp(rent._id, "HANDOFF")} className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
-                    Generate Handoff OTP
+                  <form onSubmit={(e) => { e.preventDefault(); handleGenerateOtp(rent._id, "HANDOFF"); }}>
+                    <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl w-full">
+                      Generate Handoff OTP
+                    </button>
+                  </form>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelRequest(rent._id, true)}
+                    disabled={!!pendingCancelTxIds[rent._id]}
+                    className="bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {pendingCancelTxIds[rent._id] ? "Cancelling..." : "Cancel Request"}
                   </button>
                   <span className="text-[9px] text-slate-500 text-center">Your code appears in 🔔 notifications</span>
                 </div>
@@ -290,19 +333,19 @@ export default function MyOrders() {
                 </button>
               )}
               {rent.status === "RETURN_INITIATED" && (
-                <div className="flex flex-col gap-1">
-                  <button onClick={() => handleGenerateOtp(rent._id, "RETURN")} className="bg-violet-600 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                <form onSubmit={(e) => { e.preventDefault(); handleGenerateOtp(rent._id, "RETURN"); }} className="flex flex-col gap-1">
+                  <button type="submit" className="bg-violet-600 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
                     Generate Return OTP
                   </button>
                   <span className="text-[9px] text-slate-500 text-center">Your code appears in 🔔 notifications</span>
-                </div>
+                </form>
               )}
               {rent.status === "DAMAGE_REVIEW" && (
-                <div className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl w-full max-w-sm space-y-2">
+                <form onSubmit={(e) => { e.preventDefault(); handleRaiseDispute(rent._id); }} className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl w-full max-w-sm space-y-2">
                   <p className="text-[10px] text-yellow-400 font-extrabold uppercase">⚠️ Damage Claim Filed Against You</p>
                   <input type="text" placeholder="Your dispute reason" value={disputeInputs[rent._id] || ""} onChange={(e) => setDisputeInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
-                  <button onClick={() => handleRaiseDispute(rent._id)} className="w-full bg-yellow-600 text-white text-[10px] font-bold py-2 rounded-xl">Escalate to Dispute</button>
-                </div>
+                  <button type="submit" className="w-full bg-yellow-600 text-white text-[10px] font-bold py-2 rounded-xl">Escalate to Dispute</button>
+                </form>
               )}
               {rent.status === "DISPUTED" && <div className="p-4 bg-red-600/10 border border-red-500/20 rounded-2xl text-xs"><span className="font-extrabold text-red-500">🔒 Under Admin Review</span><p className="text-slate-400 mt-1">Escrow locked. Admin will resolve.</p></div>}
               {rent.status === "SETTLED" && <div className="p-3 bg-emerald-600/10 border border-emerald-500/20 rounded-2xl text-xs"><span className="font-extrabold text-emerald-500">✓ Transaction Settled</span></div>}
@@ -320,29 +363,29 @@ export default function MyOrders() {
                 </div>
               )}
               {rent.status === "RESERVED" && (
-                <div className="flex flex-col gap-1">
+                <form onSubmit={(e) => { e.preventDefault(); handleVerifyOtp(rent._id, "HANDOFF", false); }} className="flex flex-col gap-1">
                   <div className="flex gap-1.5">
                     <input type="text" placeholder="Enter borrower's OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-36 focus:outline-none text-white placeholder-slate-400" />
-                    <button onClick={() => handleVerifyOtp(rent._id, "HANDOFF", false)} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Confirm Handoff</button>
+                    <button type="submit" className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Confirm Handoff</button>
                   </div>
                   <span className="text-[9px] text-slate-500">Ask borrower to show their 🔔 code</span>
-                </div>
+                </form>
               )}
               {rent.status === "RETURN_INITIATED" && (
                 <div className="space-y-3 w-full max-w-sm">
-                  <div className="flex flex-col gap-1">
+                  <form onSubmit={(e) => { e.preventDefault(); handleVerifyOtp(rent._id, "RETURN", false); }} className="flex flex-col gap-1">
                     <div className="flex gap-1.5">
                       <input type="text" placeholder="Enter return OTP" value={verifyOtpInput[rent._id] || ""} onChange={(e) => setVerifyOtpInput(prev => ({ ...prev, [rent._id]: e.target.value }))} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs w-28 focus:outline-none text-white placeholder-slate-400" />
-                      <button onClick={() => handleVerifyOtp(rent._id, "RETURN", false)} className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Clean Release</button>
+                      <button type="submit" className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">Clean Release</button>
                     </div>
                     <span className="text-[9px] text-slate-500">Ask borrower to show their 🔔 return code</span>
-                  </div>
-                  <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
+                  </form>
+                  <form onSubmit={(e) => { e.preventDefault(); handleReportDamage(rent._id); }} className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
                     <span className="text-[10px] font-bold text-red-400 uppercase">Report Damage on Inspection</span>
                     <input type="text" placeholder="Describe damage evidence" value={damageReports[rent._id] || ""} onChange={(e) => setDamageReports(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
                     <input type="number" placeholder="Claim Amount (₹)" value={claimAmounts[rent._id] || ""} onChange={(e) => setClaimAmounts(prev => ({ ...prev, [rent._id]: e.target.value }))} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400" />
-                    <button onClick={() => handleReportDamage(rent._id)} className="w-full bg-red-600 text-white font-bold text-[10px] py-2 rounded-xl">Submit Damage Claim</button>
-                  </div>
+                    <button type="submit" className="w-full bg-red-600 text-white font-bold text-[10px] py-2 rounded-xl">Submit Damage Claim</button>
+                  </form>
                 </div>
               )}
               {rent.status === "DAMAGE_REVIEW" && <div className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl text-xs"><span className="font-extrabold text-yellow-400">⏳ Damage Claim Under Review</span><p className="text-slate-400 mt-1">Admin will resolve the escrow dispute.</p></div>}
@@ -364,10 +407,10 @@ export default function MyOrders() {
                   <span className="text-slate-300">{msg.content}</span>
                 </div>
               ))}
-              <div className="flex gap-2 mt-2">
+              <form onSubmit={(e) => { e.preventDefault(); handleSendChat(rent._id, otherPartyId); }} className="flex gap-2 mt-2">
                 <input type="text" disabled={rent.status === "RETRACTED"} placeholder={rent.status === "RETRACTED" ? "Transaction inactive" : "Type message..."} value={chatInputs[rent._id] || ""} onChange={(e) => setChatInputs(prev => ({ ...prev, [rent._id]: e.target.value }))} className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none disabled:opacity-50" />
-                <button onClick={() => handleSendChat(rent._id, otherPartyId)} disabled={rent.status === "RETRACTED"} className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs disabled:opacity-50">Send</button>
-              </div>
+                <button type="submit" disabled={rent.status === "RETRACTED"} className="bg-indigo-500 text-white px-3 py-1 rounded-xl text-xs disabled:opacity-50">Send</button>
+              </form>
             </div>
           )}
         </div>
@@ -382,6 +425,27 @@ export default function MyOrders() {
         <h1 className="text-2xl font-black">🤝 My Orders</h1>
       </div>
 
+      <div className="max-w-5xl mx-auto mb-8">
+        <label htmlFor="order-search" className="sr-only">Search orders</label>
+        <div className="relative max-w-2xl mx-auto">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            id="order-search"
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+              }
+            }}
+            placeholder="Search by title, status, order ID, or person"
+            aria-label="Search orders"
+            className="w-full rounded-2xl border border-slate-800 bg-slate-900/80 py-3 pl-11 pr-4 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
       <div className="max-w-5xl mx-auto space-y-12">
         <section>
           <div className="flex items-center gap-3 mb-5">
@@ -393,7 +457,9 @@ export default function MyOrders() {
           </div>
           {rentingItems.length === 0
             ? <div className={`p-8 rounded-3xl border text-center ${isNight ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200"}`}><p className="text-slate-500 text-sm">No active rentals or purchases yet.</p></div>
-            : <div className="space-y-5">{rentingItems.map(r => renderCard(r, "borrower"))}</div>
+            : filterTransactions(rentingItems).length === 0
+              ? <div className={`p-8 rounded-3xl border text-center ${isNight ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200"}`}><p className="text-slate-500 text-sm">No matching orders found.</p></div>
+              : <div className="space-y-5">{filterTransactions(rentingItems).map(r => renderCard(r, "borrower"))}</div>
           }
         </section>
 
@@ -407,7 +473,9 @@ export default function MyOrders() {
           </div>
           {lendingItems.length === 0
             ? <div className={`p-8 rounded-3xl border text-center ${isNight ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200"}`}><p className="text-slate-500 text-sm">None of your listings are currently active.</p></div>
-            : <div className="space-y-5">{lendingItems.map(r => renderCard(r, "owner"))}</div>
+            : filterTransactions(lendingItems).length === 0
+              ? <div className={`p-8 rounded-3xl border text-center ${isNight ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200"}`}><p className="text-slate-500 text-sm">No matching listings found.</p></div>
+              : <div className="space-y-5">{filterTransactions(lendingItems).map(r => renderCard(r, "owner"))}</div>
           }
         </section>
       </div>

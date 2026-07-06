@@ -13,6 +13,8 @@ export default function Profile() {
   const [reputationScore, setReputationScore] = useState(100);
   const [reputationHistory, setReputationHistory] = useState([]);
   const [userRole, setUserRole] = useState("USER");
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [isTransactionHistoryExpanded, setIsTransactionHistoryExpanded] = useState(false);
 
   const getReputationTier = (score) => {
     if (score >= 1000) return { name: "Trusted Member", emoji: "💎", colorClass: "text-blue-400 bg-blue-500/15 border-blue-500/20" };
@@ -98,6 +100,12 @@ export default function Profile() {
     return Math.round(((now - start) / (end - start)) * 100);
   };
 
+  const ACTIVE = new Set(["RESERVED","IN_POSSESSION","RETURN_INITIATED","DAMAGE_REVIEW","DISPUTED"]);
+  const HISTORY = new Set(["SETTLED","NEGOTIATION_DECLINED","RETRACTED"]);
+
+  const transactionHistoryItems = [...rentingItems.filter(tx => HISTORY.has(tx.status)), ...lendingItems.filter(tx => HISTORY.has(tx.status))]
+    .sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
+
   const STATUS_BADGE = {
     RESERVED: "bg-violet-500/10 text-violet-400 border-violet-500/20",
     IN_POSSESSION: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -111,8 +119,6 @@ export default function Profile() {
     PENDING_NEGOTIATION: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   };
 
-  const ACTIVE = new Set(["RESERVED","IN_POSSESSION","RETURN_INITIATED","DAMAGE_REVIEW","DISPUTED"]);
-  const HISTORY = new Set(["SETTLED","NEGOTIATION_DECLINED","RETRACTED"]);
   const [prefCity, setPrefCity] = useState("Hyderabad");
   const [prefRadius, setPrefRadius] = useState(15);
   const [prefWhatsApp, setPrefWhatsApp] = useState(true);
@@ -283,10 +289,22 @@ export default function Profile() {
 
           {/* Reputation History Timeline */}
           <div className={`mt-8 p-6 rounded-2xl border ${isNight ? "bg-slate-950/40 border-slate-800" : "bg-indigo-50/30 border-indigo-100"}`}>
-            <h4 className="text-sm font-black uppercase tracking-wider text-slate-400 mb-4">Reputation History</h4>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h4 className="text-sm font-black uppercase tracking-wider text-slate-400">Reputation History</h4>
+              {reputationHistory.length > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={isHistoryExpanded}
+                  onClick={() => setIsHistoryExpanded((prev) => !prev)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${isNight ? "bg-slate-900 text-slate-300 hover:bg-slate-800" : "bg-white text-slate-700 hover:bg-slate-100"}`}
+                >
+                  {isHistoryExpanded ? "Hide History" : "View History"}
+                </button>
+              )}
+            </div>
             {reputationHistory.length === 0 ? (
               <p className="text-sm text-slate-500">No reputation events yet. Complete rentals and transactions to earn points.</p>
-            ) : (
+            ) : isHistoryExpanded ? (
               <div className="space-y-4">
                 {[...reputationHistory].reverse().map((entry, idx) => (
                   <div key={idx} className="flex items-start gap-4">
@@ -305,6 +323,8 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-slate-500">Your recent reputation events are collapsed by default. Expand to review the full history.</p>
             )}
           </div>
 
@@ -428,6 +448,7 @@ export default function Profile() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <h4 className="font-extrabold text-sm text-indigo-400">{tx.title}</h4>
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${STATUS_BADGE[tx.status]||"bg-slate-700/20 text-slate-400"}`}>{tx.status}</span>
+                    {tx.productType==="SECOND_HAND" && tx.status === "SETTLED" && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-black">SOLD</span>}
                   </div>
                   <p className="text-xs text-slate-400">Rs.{tx.dailyRate}/day &bull; Borrower: {tx.borrower?.name||"—"} &bull; {new Date(tx.startDate).toLocaleDateString([],{month:"short",day:"numeric"})} to {new Date(tx.endDate).toLocaleDateString([],{month:"short",day:"numeric"})}</p>
                 </div>
@@ -454,13 +475,25 @@ export default function Profile() {
 
         {/* ORDER HISTORY */}
         <div className={`mt-8 p-8 rounded-3xl border transition-all ${isNight ? "bg-slate-900/60 border-slate-800 text-white" : "bg-white border-indigo-50 text-slate-800"}`}>
-          <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400"><ShoppingBag className="w-5 h-5 inline mr-2" /> Transaction History</h3>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-xl font-black mb-1 flex items-center gap-2 text-indigo-400"><ShoppingBag className="w-5 h-5 inline mr-2" /> Transaction History</h3>
+            {transactionHistoryItems.length > 0 && (
+              <button
+                type="button"
+                aria-expanded={isTransactionHistoryExpanded}
+                onClick={() => setIsTransactionHistoryExpanded((prev) => !prev)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${isNight ? "bg-slate-900 text-slate-300 hover:bg-slate-800" : "bg-white text-slate-700 hover:bg-slate-100"}`}
+              >
+                {isTransactionHistoryExpanded ? "Hide History" : "View History"}
+              </button>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mb-6">All completed, declined, and closed transactions.</p>
           {txLoading ? (<div className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-14 rounded-2xl bg-slate-800/40 animate-pulse"/>)}</div>)
           : (()=>{
-            const hist=[...rentingItems.filter(tx=>HISTORY.has(tx.status)),...lendingItems.filter(tx=>HISTORY.has(tx.status))].sort((a,b)=>new Date(b.endDate)-new Date(a.endDate));
-            if(!hist.length) return <p className="text-sm text-slate-500">No completed transactions yet.</p>;
-            return (<div className="space-y-4">{hist.map(tx=>{
+            if(!transactionHistoryItems.length) return <p className="text-sm text-slate-500">No completed transactions yet.</p>;
+            if(!isTransactionHistoryExpanded) return <p className="text-sm text-slate-500">Your recent transactions are collapsed by default. Expand to review the full history.</p>;
+            return (<div className="space-y-4">{transactionHistoryItems.map(tx=>{
               const open=expandedCard===tx._id+"-h";
               const isBorrower=tx.borrower?._id?.toString()===currentUserId?.toString()||tx.borrower?.toString()===currentUserId?.toString();
               return (<div key={tx._id+"-h"} onClick={()=>setExpandedCard(open?null:tx._id+"-h")} className={`p-5 rounded-2xl border cursor-pointer hover:border-indigo-500/50 transition-all ${isNight?"bg-slate-950 border-slate-800":"bg-white border-slate-100"}`}>
@@ -471,6 +504,7 @@ export default function Profile() {
                       <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${STATUS_BADGE[tx.status]||"bg-slate-700/20 text-slate-400"}`}>{tx.status}</span>
                       <span className="text-[10px] text-slate-500">{isBorrower?"rented":"lent"}</span>
                       {tx.productType==="SECOND_HAND"&&<span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-black">SALE</span>}
+                      {tx.productType==="SECOND_HAND" && tx.status === "SETTLED" && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-black">SOLD</span>}
                     </div>
                     <p className="text-xs text-slate-400">Rs.{tx.totalPaid?.toLocaleString()} total &bull; {isBorrower?`Owner: ${tx.owner?.name||"—"}`:`Borrower: ${tx.borrower?.name||"—"}`} &bull; {new Date(tx.endDate).toLocaleDateString()}</p>
                   </div>

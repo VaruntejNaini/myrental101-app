@@ -20,6 +20,7 @@ import { createAuction } from "../services/auctionService.js";
 
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
+import { sendMail } from "../utils/mailer.js";
 
 const router = express.Router();
 
@@ -1013,7 +1014,7 @@ router.post("/transaction/:id/cancel", verifyToken, async (req, res) => {
     }
 
     // Only allow cancellation from these states
-    const cancellableStatuses = ["PENDING_NEGOTIATION", "AWAITING_PAYMENT"];
+    const cancellableStatuses = ["PENDING_NEGOTIATION", "AWAITING_PAYMENT", "RESERVED"];
     if (!cancellableStatuses.includes(transaction.status)) {
       await session.abortTransaction();
       session.endSession();
@@ -1194,6 +1195,49 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
     const product = await Product.findById(transaction.product).select("title productType");
     const productTitle = product?.title || "your item";
     const isSecondHand = product?.productType === "SECOND_HAND";
+
+    const receiverId = transaction.borrower;
+    const receiver = await User.findById(receiverId).select("name email");
+    const receiverName = receiver?.name || "the receiving user";
+
+    if (!receiver?.email) {
+      if (otpType === "HANDOFF") {
+        transaction.handoffOtpHash = undefined;
+        transaction.handoffOtpExpiry = undefined;
+      } else {
+        transaction.returnOtpHash = undefined;
+        transaction.returnOtpExpiry = undefined;
+      }
+      await transaction.save();
+      return res.status(500).json({ msg: "Unable to send the OTP email because the receiving user has no email address on file." });
+    }
+
+    try {
+      await sendMail({
+        from: process.env.EMAIL_USER,
+        to: receiver.email,
+        subject: otpType === "HANDOFF" ? "Your Handoff OTP" : "Your Return OTP",
+        html: `
+          <div style="font-family:sans-serif; line-height:1.5;">
+            <h2>${otpType === "HANDOFF" ? "Item Handoff Verification" : "Item Return Verification"}</h2>
+            <p>Hello ${receiverName},</p>
+            <p>Your ${otpType === "HANDOFF" ? "handoff" : "return"} OTP for "${productTitle}" is:</p>
+            <h1>${rawOtp}</h1>
+            <p>Please share this code only for the intended ${otpType === "HANDOFF" ? "handoff" : "return"} verification. It expires in 10 minutes.</p>
+          </div>
+        `,
+      });
+    } catch (mailErr) {
+      if (otpType === "HANDOFF") {
+        transaction.handoffOtpHash = undefined;
+        transaction.handoffOtpExpiry = undefined;
+      } else {
+        transaction.returnOtpHash = undefined;
+        transaction.returnOtpExpiry = undefined;
+      }
+      await transaction.save();
+      return res.status(500).json({ msg: "Failed to send the OTP email to the receiving user. Please try again." });
+    }
 
     if (otpType === "HANDOFF") {
       // Borrower gets their OTP to show to the owner

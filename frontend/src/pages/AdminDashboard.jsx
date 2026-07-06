@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Scale, ClipboardList, BarChart3, Users, CheckCircle, ArrowLeft, Package, RefreshCw, AlertTriangle } from "lucide-react";
+import { Scale, ClipboardList, BarChart3, Users, CheckCircle, ArrowLeft, Package, RefreshCw, AlertTriangle, Search } from "lucide-react";
 import API from "../api";
 
 const TABS = [
@@ -40,7 +40,7 @@ function ErrorBanner({ message, onRetry }) {
   );
 }
 
-function DisputesTab() {
+function DisputesTab({ searchTerm, onSearchChange }) {
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,6 +72,26 @@ function DisputesTab() {
   }, [loadDisputes]);
 
   const selected = disputes.find((d) => d._id === selectedId);
+  const filteredDisputes = disputes.filter((d) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return true;
+    const haystack = [
+      d.product?.title,
+      d.product?._id,
+      d._id,
+      d.borrower?.name,
+      d.borrower?.email,
+      d.owner?.name,
+      d.owner?.email,
+      d.status,
+      d.disputeReason,
+      d.damageReport,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
   const splitSum = Number(form.ownerPercentage) + Number(form.borrowerPercentage);
   const splitValid = form.outcome !== "SPLIT" || splitSum === 100;
 
@@ -126,7 +146,23 @@ function DisputesTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-3">
-        {disputes.map((d) => (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm || ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+            placeholder="Search disputes by product, person, status, or ID"
+            aria-label="Search disputes"
+            className="w-full rounded-xl border border-slate-800 bg-slate-950/70 py-2.5 pl-10 pr-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+        {filteredDisputes.length === 0 ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center text-sm text-slate-500">
+            No disputes match your search.
+          </div>
+        ) : filteredDisputes.map((d) => (
           <button
             key={d._id}
             onClick={() => setSelectedId(d._id)}
@@ -422,11 +458,10 @@ function MetricsTab() {
   );
 }
 
-function UsersTab() {
+function UsersTab({ searchTerm, onSearchChange }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [blockingId, setBlockingId] = useState(null);
@@ -437,7 +472,7 @@ function UsersTab() {
     setError("");
     try {
       const params = { page, limit: 15 };
-      if (search.trim()) params.search = search.trim();
+      if (searchTerm.trim()) params.search = searchTerm.trim();
       const res = await API.get("/admin/users", { params });
       setUsers(res.data.users || []);
       setPages(res.data.pages || 1);
@@ -446,7 +481,7 @@ function UsersTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, searchTerm]);
 
   useEffect(() => {
     loadUsers();
@@ -486,8 +521,8 @@ function UsersTab() {
         <input
           type="text"
           placeholder="Search by name or email..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          value={searchTerm}
+          onChange={(e) => { onSearchChange(e.target.value); setPage(1); }}
           className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
         />
         <button onClick={loadUsers} className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-black hover:bg-slate-700">
@@ -607,6 +642,7 @@ function UsersTab() {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("disputes");
+  const [adminSearch, setAdminSearch] = useState("");
   const isNight = localStorage.getItem("theme") === "night";
 
   return (
@@ -627,6 +663,20 @@ export default function AdminDashboard() {
           </button>
         </div>
 
+        <div className="mb-8">
+          <div className="relative max-w-2xl mx-auto">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={adminSearch}
+              onChange={(e) => setAdminSearch(e.target.value)}
+              aria-label="Search admin records"
+              placeholder="Search current admin records"
+              className="w-full rounded-2xl border border-slate-800 bg-slate-900/80 py-3 pl-11 pr-4 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-2 mb-8 p-1.5 rounded-2xl bg-slate-900/60 border border-slate-800">
           {TABS.map((tab) => (
             <button
@@ -644,10 +694,10 @@ export default function AdminDashboard() {
         </div>
 
         <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6">
-          {activeTab === "disputes" && <DisputesTab />}
+          {activeTab === "disputes" && <DisputesTab searchTerm={adminSearch} onSearchChange={setAdminSearch} />}
           {activeTab === "audit" && <AuditTab />}
           {activeTab === "metrics" && <MetricsTab />}
-          {activeTab === "users" && <UsersTab />}
+          {activeTab === "users" && <UsersTab searchTerm={adminSearch} onSearchChange={setAdminSearch} />}
         </div>
       </div>
     </div>

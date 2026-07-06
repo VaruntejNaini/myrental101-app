@@ -1,12 +1,12 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
 import { OAuth2Client } from "google-auth-library";
 
 import User from "../models/User.js";
 import { verifyToken } from "../middleware/auth.js";
+import { sendMail } from "../utils/mailer.js";
 
 const router = express.Router();
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -41,23 +41,7 @@ const otpRequestLimiter = rateLimit({
 // NODEMAILER SETUP
 // =========================
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-transporter.verify()
-  .then(() => {
-    console.log("Nodemailer transporter verified ✅");
-  })
-  .catch((err) => {
-    console.error("Nodemailer verify failed:", err.message);
-  });
-
+// Shared transporter is initialized in ../utils/mailer.js
 
 // =========================
 // REGISTER
@@ -209,7 +193,7 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
     await user.save();
 
     // SEND EMAIL with raw plain-text OTP
-    await transporter.sendMail({
+    await sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Verification OTP",

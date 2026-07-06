@@ -16,6 +16,7 @@ function VerifyOtp() {
   const [emailOtp, setEmailOtp] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [isSending, setIsSending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   
 
   useEffect(() => {
@@ -79,21 +80,25 @@ function VerifyOtp() {
   };
 
   // VERIFY EMAIL OTP
-  const verifyEmailOtp = async () => {
+  const verifyEmailOtp = async (e) => {
+    e?.preventDefault();
+    if (!emailOtp.trim() || isVerifying) return;
+
+    setIsVerifying(true);
+    setMessage("");
+
     try {
       if (mode === AUTH_MODES.FORGOT) {
         await API.post(API_ROUTES.VERIFY_RESET_OTP, {
           email,
           otp: emailOtp,
         });
-        setMessage("");
         navigate("/reset-password", { state: { email, otp: emailOtp } });
       } else {
         const res = await API.post(API_ROUTES.VERIFY_EMAIL_OTP, {
           email,
           otp: emailOtp,
         });
-        setMessage("");
         if (res.data.token) {
           localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
         }
@@ -105,6 +110,8 @@ function VerifyOtp() {
     } catch (err) {
       setMessage(err.response?.data?.msg || "Invalid Email OTP");
       setMessageType(MESSAGE_TYPES.ERROR);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -187,7 +194,7 @@ function VerifyOtp() {
 
         {/* EMAIL SECTION */}
 
-<div className="mt-6">
+<form className="mt-6" onSubmit={verifyEmailOtp}>
 
   <label className="block font-semibold text-gray-700 mb-2">
     Registered Email
@@ -236,6 +243,7 @@ function VerifyOtp() {
   />
  {/* Send OTP Button */}
   <button
+    type="button"
     onClick={sendEmailOtp}
     disabled={cooldown > 0 || isSending}
     className="
@@ -261,7 +269,8 @@ function VerifyOtp() {
 
   {/* Verify Button */}
   <button
-    onClick={verifyEmailOtp}
+    type="submit"
+    disabled={isVerifying}
     className="
       w-full
       bg-indigo-500
@@ -287,7 +296,7 @@ function VerifyOtp() {
 
  
 
-</div>
+</form>
         
       </div>
     </div>

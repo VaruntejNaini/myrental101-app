@@ -157,7 +157,7 @@ function Register() {
             <p className="text-red-200 text-sm mb-2">{error}</p>
           )}
 
-          <button type="submit" disabled={loading} className="bg-white text-indigo-650 font-bold py-3 rounded-xl hover:bg-gray-105 active:scale-95 transition cursor-pointer disabled:cursor-not-allowed shadow-md">
+          <button type="submit" disabled={loading} className="bg-white text-indigo-700 font-bold py-3 rounded-xl hover:bg-gray-100 active:scale-95 transition cursor-pointer disabled:cursor-not-allowed shadow-md">
             {loading ? "Registering..." : "Register"}
           </button>
         </form>

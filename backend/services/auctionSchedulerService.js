@@ -34,33 +34,49 @@ export const initAuctionScheduler = async () => {
     try {
       await job.touch(); // Prevent job timeout during long ops
 
-      const auction = await Auction.findById(auctionId).session(hasReplicaSet ? session : null);
-
-      if (!auction) {
-        console.warn(`[Scheduler] Auction ${auctionId} not found — skipping.`);
-        if (hasReplicaSet) await session.abortTransaction();
-        return;
-      }
-
-      if (auction.status !== AuctionStates.ACTIVE) {
-        console.log(`[Scheduler] Auction ${auctionId} is ${auction.status} — skipping.`);
-        if (hasReplicaSet) await session.abortTransaction();
-        return;
-      }
-
-      // Anti-sniping may have extended endTime — reschedule if still in the future
-      if (new Date() < new Date(auction.endTime)) {
-        console.log(`[Scheduler] Auction ${auctionId} end time extended — rescheduling.`);
-        await agenda.schedule(auction.endTime, 'auction-end', { auctionId });
-        if (hasReplicaSet) await session.abortTransaction();
-        return;
-      }
-
+      const now = new Date();
       const sessionArg = hasReplicaSet ? session : null;
 
-      if (auction.currentHighestBid >= auction.reservePrice && auction.highestBidderId) {
-        // Reserve met — transition and settle
-        await transitionState(auctionId, AuctionStates.ENDED, null, { reason: 'Time expired' }, sessionArg);
+      // ATOMIC CLAIM: Only one job can claim the auction for finalization
+      // Uses findOneAndUpdate with ACTIVE + endTime condition to atomically claim
+      const claimed = await Auction.findOneAndUpdate(
+        {
+          _id: auctionId,
+          status: AuctionStates.ACTIVE,
+          endTime: { $lte: now }  // Only claim if endTime has passed or is exactly now
+        },
+        { $set: { status: AuctionStates.ENDED } },
+        { session: sessionArg, new: true }
+      );
+
+      if (!claimed) {
+        // Either auction not ACTIVE or endTime not yet reached
+        // Check if we should reschedule for future endTime
+        const auction = await Auction.findById(auctionId).session(sessionArg);
+        if (!auction) {
+          console.warn(`[Scheduler] Auction ${auctionId} not found — skipping.`);
+          if (hasReplicaSet) await session.abortTransaction();
+          return;
+        }
+
+        if (new Date(auction.endTime) > now) {
+          // EndTime extended by anti-sniping — schedule future job and clean up duplicates
+          console.log(`[Scheduler] Auction ${auctionId} end time extended — rescheduling.`);
+          // Cancel any existing future auction-end jobs for this auction to prevent duplicates
+          await agenda.cancel({ 'data.auctionId': auctionId.toString(), nextRunAt: { $gt: now } });
+          await agenda.schedule(auction.endTime, 'auction-end', { auctionId: auctionId.toString() });
+        } else {
+          console.log(`[Scheduler] Auction ${auctionId} is ${auction.status} — skipping.`);
+        }
+        if (hasReplicaSet) await session.abortTransaction();
+        return;
+      }
+
+      // Claim succeeded — this job is now the authoritative finalizer
+      console.log(`[Scheduler] Auction ${auctionId} claimed for finalization by job.`);
+
+      if (claimed.currentHighestBid >= claimed.reservePrice && claimed.highestBidderId) {
+        // Reserve met — transition to PAYMENT_PENDING and settle
         await transitionState(auctionId, AuctionStates.PAYMENT_PENDING, null, {}, sessionArg);
 
         let io = null;
@@ -72,7 +88,6 @@ export const initAuctionScheduler = async () => {
         await agenda.schedule(expireTime, 'winner-payment-expired', { auctionId });
       } else {
         // Reserve not met
-        await transitionState(auctionId, AuctionStates.ENDED, null, { reason: 'Time expired' }, sessionArg);
         await transitionState(auctionId, AuctionStates.RESERVE_NOT_MET, null, {}, sessionArg);
 
         // Broadcast no-winner end

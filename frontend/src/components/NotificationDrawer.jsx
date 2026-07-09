@@ -66,6 +66,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
 
   const handleClearTransactionNotifications = async (txId, otherUser, productTitle) => {
     try {
+      // Step 1: Mark notifications as read
       await API.post(`/rent/notifications/transaction/${txId}/read`);
       // Update local state immediately (no flicker)
       setNotifications(prev => prev.filter(n => {
@@ -74,20 +75,61 @@ export default function NotificationDrawer({ isOpen, onClose }) {
         return currentTxId !== txId;
       }));
       window.dispatchEvent(new Event("refreshNotificationCount"));
+
+      // Step 2: OPEN THE CHATBOX FIRST (critical user action)
+      // Use productTitle from API response, fallback to passed parameter
+      let displayProductTitle = productTitle || "Item";
+      try {
+        const response = await API.post(`/rent/negotiate/${txId}/chat-now`);
+        if (response.data.productTitle) {
+          displayProductTitle = response.data.productTitle;
+        }
+      } catch (notifyErr) {
+        // Non-critical - chat already opened, just log warning
+        console.warn("Failed to get productTitle from API:", notifyErr);
+      }
       
-      // Open the chatbox
       window.dispatchEvent(
         new CustomEvent("openChatbox", {
           detail: {
             transactionId: txId,
             otherUser,
+            productTitle: displayProductTitle
+          }
+        })
+      );
+
+      onClose();
+    } catch (err) {
+      console.error("Error clearing transaction notifications:", err);
+    }
+  };
+
+  const handleOwnerReadyNegotiationChat = async (txId, sender, productTitle) => {
+    try {
+      // Mark notifications as read
+      await API.post(`/rent/notifications/transaction/${txId}/read`);
+      setNotifications(prev => prev.filter(n => {
+        const txMatch = n.link ? n.link.match(/tx=([^&#=]*)/) : null;
+        const currentTxId = n.transactionId || (txMatch ? txMatch[1] : null);
+        return currentTxId !== txId;
+      }));
+      window.dispatchEvent(new Event("refreshNotificationCount"));
+
+      // Open the chatbox - sender is the owner
+      window.dispatchEvent(
+        new CustomEvent("openChatbox", {
+          detail: {
+            transactionId: txId,
+            otherUser: sender,
             productTitle: productTitle || "Item"
           }
         })
       );
+      
       onClose();
     } catch (err) {
-      console.error("Error clearing transaction notifications:", err);
+      console.error("Error handling owner ready negotiation chat:", err);
     }
   };
 
@@ -170,6 +212,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 OFFER_RETRACTED: "border-l-rose-500 border-rose-500/15 bg-rose-500/5 dark:border-rose-500/25 dark:bg-rose-500/10",
                 OTP_HANDOFF: "border-l-violet-500 border-violet-500/15 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/10",
                 OTP_RETURN: "border-l-violet-500 border-violet-500/15 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/10",
+                OWNER_WANTS_TO_NEGOTIATE: "border-l-violet-500 border-violet-500/15 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/10",
               };
               const emojiMap = {
                 NEGOTIATION: "💬",
@@ -178,6 +221,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 OFFER_RETRACTED: "🚫",
                 OTP_HANDOFF: "🔑",
                 OTP_RETURN: "🔄",
+                OWNER_WANTS_TO_NEGOTIATE: "💬",
               };
               const labelMap = {
                 NEGOTIATION: "NEGOTIATION",
@@ -186,6 +230,7 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                 OFFER_RETRACTED: "Offer Retracted",
                 OTP_HANDOFF: "Handoff Code",
                 OTP_RETURN: "Return Code",
+                OWNER_WANTS_TO_NEGOTIATE: "Negotiation",
               };
 
               const isOtpNotif = notif.type === "OTP_HANDOFF" || notif.type === "OTP_RETURN";
@@ -288,6 +333,13 @@ export default function NotificationDrawer({ isOpen, onClose }) {
                                 className="w-full py-1.5 px-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
                               >
                                 <ArrowRight className="w-3 h-3" /> Go to Your Orders Page
+                              </button>
+                            ) : notif.type === "OWNER_WANTS_TO_NEGOTIATE" ? (
+                              <button
+                                onClick={() => handleOwnerReadyNegotiationChat(txId, notif.sender, notif.message)}
+                                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black tracking-wide shadow transition-all active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
+                              >
+                                💬 CHAT NOW
                               </button>
                             ) : (
                               <button

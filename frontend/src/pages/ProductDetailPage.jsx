@@ -175,6 +175,12 @@ export default function ProductDetailPage() {
 
  const handleNegotiateClick = async () => {
   if (!product) return;
+  // Auth guard
+  if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+    navigate("/register");
+    return;
+  }
+  
   if (activeNegotiationStatus !== null) {
     triggerToast("You already have an active negotiation for this product.");
     return;
@@ -243,6 +249,12 @@ export default function ProductDetailPage() {
 
   const handleAction = async () => {
     if (!product) return;
+    // Auth guard
+    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      navigate("/register");
+      return;
+    }
+    
     if (product.productType === "SECOND_HAND") {
       try {
         await API.post("/rent/negotiate", {

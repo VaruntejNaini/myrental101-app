@@ -349,25 +349,37 @@ export default function RentCatalogPage() {
     return ALLOWED_SORTS.includes(val) ? val : "newest";
   });
   const handleRentClick = async (productId, price, securityDeposit) => {
-  try {
-    await API.post("/rent/negotiate", {
-      productId,
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-      dailyRate: price,
-      securityDeposit: securityDeposit || 0
-    });
-    triggerToast("Rental request submitted!");
-    setTimeout(() => navigate(`/rent/checkout/${productId}`), 1500);
-  } catch (err) {
-    triggerToast(err.response?.data?.msg || "Rental request failed");
-  }
-};
-const handleNegotiationClick = async (productId, currentPrice, title) => {
-  if (userNegotiations[productId]) {
-    triggerToast("You already have an active negotiation for this product.");
-    return;
-  }
+    // Auth guard
+    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      navigate("/register");
+      return;
+    }
+    
+    try {
+      await API.post("/rent/negotiate", {
+        productId,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        dailyRate: price,
+        securityDeposit: securityDeposit || 0
+      });
+      triggerToast("Rental request submitted!");
+      setTimeout(() => navigate(`/rent/checkout/${productId}`), 1500);
+    } catch (err) {
+      triggerToast(err.response?.data?.msg || "Rental request failed");
+    }
+  };
+  const handleNegotiationClick = async (productId, currentPrice, title) => {
+    // Auth guard
+    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+      navigate("/register");
+      return;
+    }
+    
+    if (userNegotiations[productId]) {
+      triggerToast("You already have an active negotiation for this product.");
+      return;
+    }
   const offer = window.prompt(`Enter your custom daily rate for "${title}" (Current: ₹${currentPrice}/day):`);
   if (!offer) return;
   const numericOffer = parseFloat(offer);

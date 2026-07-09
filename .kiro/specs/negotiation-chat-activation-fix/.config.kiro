@@ -1,0 +1,12 @@
+{
+  "specType": "bugfix",
+  "workflowType": "requirements-first",
+  "featureName": "negotiation-chat-activation-fix",
+  "createdAt": "2026-07-09T16:51:00.000Z",
+  "currentPhase": "completed",
+  "documents": {
+    "requirements": "requirements.md",
+    "design": "design.md",
+    "tasks": "tasks.md"
+  }
+}

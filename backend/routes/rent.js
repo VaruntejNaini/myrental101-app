@@ -66,13 +66,28 @@ async function checkOverlap(productId, start, end, session = null) {
 // Helper to push automated notifications
 async function createNotification(userId, type, title, message, senderId = null, link = "", transactionId = null, session = null) {
   try {
-    let newType = "SYSTEM";
-    if (["NEW_NEGOTIATION_OFFER", "OFFER_ACCEPTED", "NEW_BID", "OUTBID_ALERT"].includes(type)) {
+    // Map all notification types to valid schema enum values
+    let newType;
+    
+    // Preserve exact types that are already valid enum values
+    if (["OWNER_WANTS_TO_NEGOTIATE", "REQUEST_CANCELLED", "OFFER_RETRACTED", "OTP_HANDOFF", "OTP_RETURN"].includes(type)) {
+      newType = type;
+    } 
+    // Map negotiation-related types to NEGOTIATION
+    else if (["NEW_NEGOTIATION_OFFER", "OFFER_ACCEPTED", "OFFER_REJECTED", "Counter Offer Made"].includes(type)) {
       newType = "NEGOTIATION";
-    } else if (["RETURN_INITIATED", "DISPUTE_RAISED", "SETTLEMENT_COMPLETED"].includes(type)) {
+    }
+    // Map order-related types to ORDER
+    else if (["RETURN_INITIATED", "DISPUTE_RAISED", "SETTLEMENT_COMPLETED"].includes(type)) {
       newType = "ORDER";
-    } else if (type === "OFFER_RETRACTED") {
-      newType = "OFFER_RETRACTED";
+    }
+    // Map other known types
+    else if (["OTP_GENERATED"].includes(type)) {
+      newType = "SYSTEM";
+    }
+    // Default fallback
+    else {
+      newType = "SYSTEM";
     }
     
     const notif = new Notification({
@@ -1027,7 +1042,7 @@ router.post("/transaction/:id/cancel", verifyToken, async (req, res) => {
     await transaction.save({ session });
 
     // Award -3 reputation to borrower (idempotent due to cancelledAt check above)
-    await awardReputation(transaction.borrower, -3, "REQUEST_CANCELLED");
+    await awardReputation(transaction.borrower, -3, "REQUEST_CANCELLED", { session });
 
     // Notify owner
     const borrowerUser = await User.findById(transaction.borrower).session(session);
@@ -1441,6 +1456,62 @@ router.post("/transaction/:id/dispute", verifyToken, async (req, res) => {
     res.json(transaction);
   } catch (err) {
     res.status(500).json({ msg: err.message });
+  }
+});
+
+// Chat Now - Owner wants to negotiate, creates notification for borrower
+router.post("/negotiate/:id/chat-now", verifyToken, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id)
+      .populate("product", "title owner")
+      .populate("borrower", "name profilePic");
+    
+    if (!transaction) {
+      return res.status(404).json({ msg: "Transaction not found" });
+    }
+    
+    // Verify owner is making the request
+    const productOwnerId = transaction.product.owner._id || transaction.product.owner;
+    if (String(productOwnerId) !== String(req.userId)) {
+      return res.status(403).json({ msg: "Not authorized" });
+    }
+    
+    // IDEMPOTENCY CHECK: Check if notification already exists for this exact negotiation
+    const existingNotification = await Notification.findOne({
+      recipient: transaction.borrower._id,
+      type: "OWNER_WANTS_TO_NEGOTIATE",
+      transactionId: transaction._id
+      // No time constraint - same notification should only be created once per negotiation
+    });
+    
+    if (!existingNotification) {
+      // Create notification for borrower
+      await createNotification(
+        transaction.borrower._id,
+        "OWNER_WANTS_TO_NEGOTIATE",
+        "Owner Wants to Negotiate",
+        `The owner wants to discuss the rental for "${transaction.product.title}" with you.`,
+        req.userId,
+        `/product/${transaction.product._id}?tx=${transaction._id}`,
+        transaction._id
+      );
+    }
+    
+    // Return information needed for frontend to open chat
+    res.json({
+      success: true,
+      duplicate: !!existingNotification,
+      transactionId: transaction._id.toString(),
+      otherUser: {
+        _id: transaction.borrower._id.toString(),
+        name: transaction.borrower.name,
+        profilePic: transaction.borrower.profilePic
+      },
+      productTitle: transaction.product.title
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error" });
   }
 });
 

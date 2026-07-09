@@ -660,6 +660,7 @@ export default function Dashboard() {
   const [dbProducts, setDbProducts] = useState([]);
   const [myProducts, setMyProducts] = useState([]);
   const [dbWishes, setDbWishes] = useState([]);
+  const [secondHandProducts, setSecondHandProducts] = useState([]);
 
   const syncMyProducts = () => {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
@@ -673,9 +674,16 @@ export default function Dashboard() {
   };
 
   const syncProducts = () => {
-    API.get("/rent/products")
+    // Fetch RENT products
+    API.get("/rent/products", { params: { productType: "RENT" } })
       .then(res => setDbProducts(res.data))
       .catch(err => console.error("Error fetching db products:", err));
+    
+    // Fetch SECOND_HAND products for the landing page row
+    API.get("/rent/products", { params: { productType: "SECOND_HAND" } })
+      .then(res => setSecondHandProducts(res.data))
+      .catch(err => console.error("Error fetching second-hand products:", err));
+    
     syncMyProducts();
   };
 
@@ -1487,7 +1495,7 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-            {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
+            {secondHandProducts.filter(p => !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
                 item={{
@@ -1520,7 +1528,7 @@ export default function Dashboard() {
                 currentUser={currentUser}
               />
             ))}
-            {dbProducts.filter(p => p.productType === "SECOND_HAND" && !myProducts.map(x => x._id).includes(p._id)).length === 0 && (
+            {secondHandProducts.filter(p => !myProducts.map(x => x._id).includes(p._id)).length === 0 && (
               <p className="text-xs text-slate-400 p-4">No second-hand buyout listings currently active.</p>
             )}
           </div>

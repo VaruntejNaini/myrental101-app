@@ -81,6 +81,7 @@ function Register() {
       });
 
       localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
+      localStorage.removeItem("userProfilePic");
       navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.msg || "Google Authentication failed");

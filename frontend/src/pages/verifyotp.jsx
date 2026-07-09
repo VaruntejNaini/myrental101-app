@@ -105,6 +105,7 @@ function VerifyOtp() {
         if (res.data.user?.name) {
           localStorage.setItem("user_name", res.data.user.name);
         }
+        localStorage.removeItem("userProfilePic");
         navigate("/dashboard");
       }
     } catch (err) {

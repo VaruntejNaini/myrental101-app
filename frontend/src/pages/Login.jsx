@@ -81,6 +81,7 @@ function Login() {
       if (res.data.user?.name) {
         localStorage.setItem("user_name", res.data.user.name);
       }
+      localStorage.removeItem("userProfilePic");
       navigate("/dashboard");
     } catch (err) {
       if (err.response?.data?.msg === "ACCOUNT_BLOCKED") {
@@ -105,6 +106,7 @@ function Login() {
       if (res.data.user?.name) {
         localStorage.setItem("user_name", res.data.user.name);
       }
+      localStorage.removeItem("userProfilePic");
       navigate("/dashboard");
     } catch (err) {
       if (err.response?.data?.msg === "ACCOUNT_BLOCKED") {

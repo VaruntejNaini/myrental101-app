@@ -14,6 +14,7 @@ import Message from "../models/Message.js";
 import Review from "../models/Review.js";
 import User from "../models/User.js";
 import { awardReputation } from "../services/reputationService.js";
+import { canReadChat, canWriteChat, isChatParticipant, getChatReceiverId } from "../utils/chatPolicy.js";
 import Bookmark from "../models/Bookmark.js";
 import Bid from "../models/Bid.js";
 import { createAuction } from "../services/auctionService.js";
@@ -1541,24 +1542,11 @@ router.get("/chat/:transactionId", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.transactionId);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    const isBorrowerUser = transaction.borrower.toString() === req.userId;
-    const isOwnerUser = transaction.owner.toString() === req.userId;
-    if (!isBorrowerUser && !isOwnerUser) {
+    if (!isChatParticipant(transaction, req.userId)) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
-    const CHAT_ALLOWED_READ_STATES = [
-      "PENDING_NEGOTIATION",
-      "AWAITING_PAYMENT",
-      "RESERVED",
-      "IN_POSSESSION",
-      "RETURN_INITIATED",
-      "DAMAGE_REVIEW",
-      "DISPUTED",
-      "REFUND_PROCESSING",
-      "SETTLED"
-    ];
-    if (!CHAT_ALLOWED_READ_STATES.includes(transaction.status)) {
+    if (!canReadChat(transaction)) {
       return res.status(400).json({ msg: `Read access is not permitted for transaction status: ${transaction.status}` });
     }
 
@@ -1596,22 +1584,11 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
     const transaction = await Transaction.findById(req.params.transactionId);
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-   const isSenderBorrower = transaction.borrower.toString() === req.userId;
-   const isSenderOwner = transaction.owner.toString() === req.userId;
-   if (!isSenderBorrower && !isSenderOwner) {
+   if (!isChatParticipant(transaction, req.userId)) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
-    const CHAT_ALLOWED_WRITE_STATES = [
-      "PENDING_NEGOTIATION",
-      "AWAITING_PAYMENT",
-      "RESERVED",
-      "IN_POSSESSION",
-      "RETURN_INITIATED",
-      "DAMAGE_REVIEW",
-      "DISPUTED"
-    ];
-    if (!CHAT_ALLOWED_WRITE_STATES.includes(transaction.status)) {
+    if (!canWriteChat(transaction)) {
       return res.status(400).json({ msg: `Sending messages is not permitted for transaction status: ${transaction.status}` });
     }
 
@@ -1621,7 +1598,7 @@ router.post("/chat/:transactionId", verifyToken, async (req, res) => {
       return res.status(400).json({ msg: "Message content must be between 1 and 2000 characters." });
     }
 
-    const receiverId = isOwner(transaction, req.userId) ? transaction.borrower : transaction.owner;
+    const receiverId = getChatReceiverId(transaction, req.userId);
     const message = await Message.create({
       transaction: req.params.transactionId,
       sender: req.userId,

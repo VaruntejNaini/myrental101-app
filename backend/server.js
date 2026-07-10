@@ -14,6 +14,7 @@ import addressRoutes from "./routes/addresses.js";
 import adminRoutes from "./routes/admin.js";
 import auctionRoutes from "./controllers/auctionController.js";
 import { initAuctionSockets } from "./sockets/auctionSockets.js";
+import { registerChatSocketHandlers } from "./sockets/chatSockets.js";
 import { initAuctionScheduler } from "./services/auctionSchedulerService.js";
 //import { initNotificationQueue } from "./services/notificationQueueService.js";
 import http from "http";
@@ -253,6 +254,7 @@ const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
 const io = initAuctionSockets(server);
+registerChatSocketHandlers(io);
 app.set('io', io);
 
 server.listen(PORT, () => {

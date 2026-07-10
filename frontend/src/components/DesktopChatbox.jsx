@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Plus, Minus, X, Send } from "lucide-react";
 import API from "../api";
 import { STORAGE_KEYS } from "../constants/auth";
+import { getSocket } from "../services/socket";
 
 export default function DesktopChatbox() {
   const [activeChats, setActiveChats] = useState([]);
@@ -134,8 +135,10 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [txDetails, setTxDetails] = useState(null);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
+  const sendingRef = useRef(false);
 
   const currentUserId = localStorage.getItem(STORAGE_KEYS.TOKEN)
     ? JSON.parse(atob(localStorage.getItem(STORAGE_KEYS.TOKEN).split(".")[1])).id
@@ -143,19 +146,27 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   const myProfilePic = localStorage.getItem("userProfilePic") || "";
   const myName = localStorage.getItem("user_name") || "Me";
 
-  // Fetch populated transaction details — called on mount and after any status-changing action
-  const fetchTxDetails = async () => {
+  const socket = getSocket();
+
+  // Stable handler refs for socket listeners
+  const handleNewMessageRef = useRef(null);
+  const handleMessagesReadRef = useRef(null);
+  const handleUnreadCountRef = useRef(null);
+  const handleTypingRef = useRef(null);
+
+  // Fetch populated transaction details
+  const fetchTxDetails = useCallback(async () => {
     try {
       const res = await API.get(`/rent/transactions/${chat.transactionId}`);
       setTxDetails(res.data);
     } catch (err) {
       console.error("Error fetching transaction details in chatbox:", err);
     }
-  };
+  }, [chat.transactionId]);
 
   useEffect(() => {
     fetchTxDetails();
-  }, [chat.transactionId]);
+  }, [fetchTxDetails]);
 
   const resolvedProductTitle = txDetails?.product?.title || chat.productTitle || "Negotiation Chat";
   const isOwner = String(txDetails?.owner?._id || txDetails?.owner) === String(currentUserId);
@@ -163,38 +174,176 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
     ? (isOwner ? txDetails.borrower : txDetails.owner)
     : chat.otherUser;
 
-  // Poll chat messages AND refresh tx status so checkout button appears automatically
-  const fetchMessages = async () => {
+  // Fetch messages via REST with merge+dedup to prevent race-condition loss
+  const fetchMessages = useCallback(async () => {
     try {
       const res = await API.get(`/rent/chat/${chat.transactionId}`);
+      const historyMessages = res.data;
+
       setMessages((prev) => {
-        const optimisticMsgs = prev.filter((m) => m.isOptimistic);
-        const filteredOptimistic = optimisticMsgs.filter(
-          (opt) => !res.data.some((real) => real.content === opt.content && real.sender === opt.sender)
+        const existingIds = new Set();
+        prev.forEach((msg) => existingIds.add(msg._id));
+
+        const newFromHistory = historyMessages.filter(
+          (msg) => !existingIds.has(msg._id)
         );
-        return [...res.data, ...filteredOptimistic];
+
+        const merged = [...prev, ...newFromHistory];
+        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+        return merged;
       });
     } catch (err) {
       console.error("Error fetching messages in chatbox:", err);
     }
-    // Refresh tx status on every poll cycle so both parties see state changes in real-time
+    // Refresh tx status on every poll cycle
     try {
       const txRes = await API.get(`/rent/transactions/${chat.transactionId}`);
       setTxDetails(txRes.data);
     } catch (err) {
       // non-fatal
     }
-  };
+  }, [chat.transactionId]);
+
+  // ── Socket event registration ────────────────────────────────────────────
 
   useEffect(() => {
-    if (!chat.isMinimized) {
-      fetchMessages();
-      const interval = setInterval(fetchMessages, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [chat.transactionId, chat.isMinimized]);
+    if (!socket || !chat.transactionId) return;
 
-  // Clear any transaction-level notifications when entering/opening a thread
+    // ── chat:new_message handler ──────────────────────────────────────────
+    const handleNewMessage = (message) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m._id === message._id)) {
+          return prev; // Defensive dedup
+        }
+
+        const updated = [...prev, message];
+        updated.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        return updated;
+      });
+    };
+
+    // ── chat:messages_read handler ────────────────────────────────────────
+    const handleMessagesRead = ({ transactionId }) => {
+      if (String(transactionId) !== String(chat.transactionId)) return;
+
+      setMessages((prev) =>
+        prev.map((msg) => {
+          const isMe = String(msg.sender?._id || msg.sender) === String(currentUserId);
+          if (!isMe && msg.readStatus === false) {
+            return { ...msg, readStatus: true };
+          }
+          return msg;
+        })
+      );
+    };
+
+    // ── chat:unread_count_updated handler ─────────────────────────────────
+    const handleUnreadCountUpdated = () => {
+      window.dispatchEvent(new Event("refreshUnreadChatCount"));
+    };
+
+    // ── chat:typing handler ───────────────────────────────────────────────
+    const handleTyping = ({ userId, isTyping }) => {
+      // Could be extended to show typing indicator in UI
+      // Currently no-op to keep implementation minimal
+    };
+
+    // Store stable refs
+    handleNewMessageRef.current = handleNewMessage;
+    handleMessagesReadRef.current = handleMessagesRead;
+    handleUnreadCountRef.current = handleUnreadCountUpdated;
+    handleTypingRef.current = handleTyping;
+
+    socket.on("chat:new_message", handleNewMessage);
+    socket.on("chat:messages_read", handleMessagesRead);
+    socket.on("chat:unread_count_updated", handleUnreadCountUpdated);
+    socket.on("chat:typing", handleTyping);
+
+    return () => {
+      socket.off("chat:new_message", handleNewMessage);
+      socket.off("chat:messages_read", handleMessagesRead);
+      socket.off("chat:unread_count_updated", handleUnreadCountUpdated);
+      socket.off("chat:typing", handleTyping);
+      handleNewMessageRef.current = null;
+      handleMessagesReadRef.current = null;
+      handleUnreadCountRef.current = null;
+      handleTypingRef.current = null;
+    };
+  }, [socket, chat.transactionId, currentUserId]);
+
+  // ── Room join/leave on transaction change ────────────────────────────────
+
+  useEffect(() => {
+    if (!socket || !chat.transactionId) return;
+
+    // Join the transaction room
+    socket.emit("chat:join", { transactionId: chat.transactionId });
+
+    // If chat is focused and not minimized, set active and mark read
+    if (isFocused && !chat.isMinimized) {
+      socket.emit("chat:set_active", { transactionId: chat.transactionId });
+      socket.emit("chat:mark_read", { transactionId: chat.transactionId });
+    }
+
+    return () => {
+      socket.emit("chat:leave", { transactionId: chat.transactionId });
+    };
+  }, [chat.transactionId, socket, isFocused, chat.isMinimized]);
+
+  // ── Reconnect room restoration ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!socket || !chat.transactionId) return;
+
+    const handleConnect = () => {
+      const currentTxId = chat.transactionId;
+      const isChatVisible = !chat.isMinimized && isFocused;
+
+      socket.emit("chat:join", { transactionId: currentTxId }, (response) => {
+        if (response?.success) {
+          // Re-fetch messages to catch any missed during disconnect
+          fetchMessages();
+
+          if (isChatVisible) {
+            socket.emit("chat:set_active", { transactionId: currentTxId });
+            socket.emit("chat:mark_read", { transactionId: currentTxId });
+          }
+        }
+      });
+    };
+
+    socket.on("connect", handleConnect);
+
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [socket, chat.transactionId, chat.isMinimized, isFocused, fetchMessages]);
+
+  // ── Active state management ──────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!socket || !chat.transactionId) return;
+
+    if (isFocused && !chat.isMinimized) {
+      socket.emit("chat:set_active", { transactionId: chat.transactionId });
+    } else {
+      socket.emit("chat:clear_active");
+    }
+  }, [socket, chat.transactionId, isFocused, chat.isMinimized]);
+
+  // ── REST history polling (kept for history reload, reduced frequency) ────
+
+  useEffect(() => {
+    if (chat.isMinimized) return;
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 8000); // Reduced from 4s since we have socket
+    return () => clearInterval(interval);
+  }, [chat.transactionId, chat.isMinimized, fetchMessages]);
+
+  // ── Transaction notification clearing ────────────────────────────────────
+
   useEffect(() => {
     if (!chat.transactionId || chat.isMinimized) return;
     const clearNotifications = async () => {
@@ -208,16 +357,7 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
     clearNotifications();
   }, [chat.transactionId, chat.isMinimized]);
 
-  // Read message triggers: mark thread as read when focused and unread messages from other user exist
-  const handleMarkAsRead = async () => {
-    try {
-      await API.post(`/rent/chat/${chat.transactionId}/read`);
-      // Dispatch global unread count update for navbar ChatBell
-      window.dispatchEvent(new Event("refreshUnreadChatCount"));
-    } catch (err) {
-      console.error("Error marking messages as read:", err);
-    }
-  };
+  // ── Mark messages as read when focused and unread messages exist ──────────
 
   useEffect(() => {
     if (isFocused && !chat.isMinimized && messages.length > 0) {
@@ -226,12 +366,13 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
         return !isMe && !msg.readStatus;
       });
       if (hasUnread) {
-        handleMarkAsRead();
+        socket?.emit("chat:mark_read", { transactionId: chat.transactionId });
       }
     }
-  }, [isFocused, chat.isMinimized, messages]);
+  }, [isFocused, chat.isMinimized, messages, socket, chat.transactionId, currentUserId]);
 
-  // Smart Auto-Scroll: Auto-scroll only when user is already near bottom or last message is from me
+  // ── Smart Auto-Scroll ────────────────────────────────────────────────────
+
   useEffect(() => {
     const container = chatContainerRef.current;
     if (!container) return;
@@ -243,47 +384,55 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
     if (isNearBottom || isSentByMe || messages.length <= 2) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, chat.isMinimized]);
+  }, [messages, chat.isMinimized, currentUserId]);
+
+  // ── Send message (NO optimistic insertion) ────────────────────────────────
 
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
+
+    // Synchronous double-send guard
+    if (sendingRef.current) return;
+
     const textToSend = inputMessage.trim();
-  if (!textToSend || !chat.transactionId || !resolvedOtherUser?._id) return;
+    if (!textToSend || !chat.transactionId || !resolvedOtherUser?._id) return;
 
-
-    // Optimistic message update
-    const tempId = `optimistic_${Date.now()}`;
-    const tempMsg = {
-      _id: tempId,
-      sender: currentUserId,
-      receiver: resolvedOtherUser._id,
-      content: textToSend,
-      createdAt: new Date().toISOString(),
-      isOptimistic: true,
-    };
-
-    setMessages((prev) => [...prev, tempMsg]);
-    setInputMessage("");
+    sendingRef.current = true;
+    setSending(true);
 
     try {
-      const payload = {
-        receiverId: resolvedOtherUser._id,
-        content: textToSend,
-      };
-      const res = await API.post(`/rent/chat/${chat.transactionId}`, payload);
-      
-      // Replace optimistic message with actual backend response
-      setMessages((prev) =>
-        prev.map((m) => (m._id === tempId ? res.data : m))
-      );
+      const currentSocket = getSocket();
 
-      // Trigger unread count sync
-      window.dispatchEvent(new Event("refreshUnreadChatCount"));
+      await new Promise((resolve, reject) => {
+        if (!currentSocket || currentSocket.connected !== true) {
+          return reject(new Error("Socket not connected"));
+        }
+
+        currentSocket.emit(
+          "chat:send_message",
+          {
+            transactionId: chat.transactionId,
+            content: textToSend,
+          },
+          (response) => {
+            if (response?.success) {
+              resolve(response);
+            } else {
+              reject(new Error(response?.error || "Failed to send message"));
+            }
+          }
+        );
+      });
+
+      // Success: clear input
+      setInputMessage("");
     } catch (err) {
-      console.error("Failed to send message optimistically:", err);
-      // Rollback optimistic message on error
-      setMessages((prev) => prev.filter((m) => m._id !== tempId));
-      setInputMessage(textToSend); // Restore user input
+      console.error("Failed to send message:", err);
+      // Keep input text on error so user can retry
+      setInputMessage(textToSend);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
 
@@ -413,12 +562,12 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
                 )}
                 {txDetails?.status === "RESERVED" && (
                   <span className="text-[9px] font-bold text-emerald-500 block mt-1">
-                    ✓ Payment secured. Check your 🔔 Orders panel for OTP handoff.
+                    ✓ Payment secured. Check your Orders panel for OTP handoff.
                   </span>
                 )}
                 {txDetails?.status === "NEGOTIATION_DECLINED" && (
                   <span className="text-[9px] font-bold text-red-400 block mt-1">
-                    ✗ Offer rejected. This negotiation is closed.
+                    Offer rejected. This negotiation is closed.
                   </span>
                 )}
               </div>
@@ -461,13 +610,13 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onFocus={onFocus}
-              disabled={txDetails?.status === "RETRACTED" || !txDetails}
+              disabled={txDetails?.status === "RETRACTED" || !txDetails || sending}
               placeholder={!txDetails? "Loading chat...": txDetails?.status === "RETRACTED"? "Transaction is inactive": "Type a message..."}
               className="flex-1 bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 focus:border-indigo-500 focus-visible:ring-1 focus-visible:ring-indigo-500/30 outline-none rounded-2xl py-1.5 px-3.5 text-xs font-semibold text-slate-800 dark:text-white placeholder-[#9CA3AF] disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              disabled={txDetails?.status === "RETRACTED" || !resolvedOtherUser?._id}
+              disabled={txDetails?.status === "RETRACTED" || !resolvedOtherUser?._id || sending}
               className="w-7 h-7 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full cursor-pointer transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               title="Send"
             >

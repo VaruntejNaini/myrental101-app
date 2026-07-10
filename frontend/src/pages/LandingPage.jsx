@@ -1053,6 +1053,7 @@ export default function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem("bookmarked_items");
+    window.dispatchEvent(new Event("authStateChanged"));
     setSidePanelOpen(false);
     setMyProducts([]);
     triggerToast("Logged out successfully. Authentication wiped!");

@@ -312,7 +312,7 @@ export default function MyOrders() {
               {rent.status === "RESERVED" && (
                 <div className="flex flex-col gap-1">
                   <form onSubmit={(e) => { e.preventDefault(); handleGenerateOtp(rent._id, "HANDOFF"); }}>
-                    <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl w-full">
+                    <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl w-full cursor-pointer">
                       Generate Handoff OTP
                     </button>
                   </form>
@@ -334,7 +334,7 @@ export default function MyOrders() {
               )}
               {rent.status === "RETURN_INITIATED" && (
                 <form onSubmit={(e) => { e.preventDefault(); handleGenerateOtp(rent._id, "RETURN"); }} className="flex flex-col gap-1">
-                  <button type="submit" className="bg-violet-600 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl">
+                  <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] px-3.5 py-2 rounded-xl cursor-pointer">
                     Generate Return OTP
                   </button>
                   <span className="text-[9px] text-slate-500 text-center">Your code appears in 🔔 notifications</span>

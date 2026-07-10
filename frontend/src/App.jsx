@@ -19,6 +19,8 @@ import RentCheckout from "./pages/RentCheckout";
 import AdminRoute from "./components/AdminRoute";
 import AdminDashboard from "./pages/AdminDashboard";
 import BlockedPage from "./pages/BlockedPage";
+import { connectSocket, disconnectSocket, getSocket, reconnectSocketWithAuth } from "./services/socket";
+import { STORAGE_KEYS } from "./constants/auth";
 
 function App() {
   useEffect(() => {
@@ -30,6 +32,41 @@ function App() {
       document.documentElement.classList.remove("dark");
       document.documentElement.style.colorScheme = "light";
     }
+
+    // ── Global socket connection for authenticated users ──────────────────
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (token) {
+      connectSocket();
+    }
+
+    const handleAuthChange = () => {
+      const newToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
+      if (newToken) {
+        reconnectSocketWithAuth();
+      } else {
+        disconnectSocket();
+      }
+    };
+
+    window.addEventListener("authStateChanged", handleAuthChange);
+
+    // ── Global unread count updates from socket ──────────────────────────
+    const socket = getSocket();
+    const handleUnreadCountUpdated = () => {
+      window.dispatchEvent(new Event("refreshUnreadChatCount"));
+    };
+
+    if (socket) {
+      socket.on("chat:unread_count_updated", handleUnreadCountUpdated);
+    }
+
+    return () => {
+      disconnectSocket();
+      window.removeEventListener("authStateChanged", handleAuthChange);
+      if (socket) {
+        socket.off("chat:unread_count_updated", handleUnreadCountUpdated);
+      }
+    };
   }, []);
 
   return (

@@ -76,28 +76,36 @@ export default function NotificationDrawer({ isOpen, onClose }) {
       }));
       window.dispatchEvent(new Event("refreshNotificationCount"));
 
-      // Step 2: OPEN THE CHATBOX FIRST (critical user action)
-      // Use productTitle from API response, fallback to passed parameter
-      let displayProductTitle = productTitle || "Item";
-      try {
-        const response = await API.post(`/rent/negotiate/${txId}/chat-now`);
-        if (response.data.productTitle) {
-          displayProductTitle = response.data.productTitle;
-        }
-      } catch (notifyErr) {
-        // Non-critical - chat already opened, just log warning
-        console.warn("Failed to get productTitle from API:", notifyErr);
-      }
-      
+      // Step 2: OPEN THE CHATBOX FIRST (critical user action - happens immediately)
       window.dispatchEvent(
         new CustomEvent("openChatbox", {
           detail: {
             transactionId: txId,
             otherUser,
-            productTitle: displayProductTitle
+            productTitle: productTitle || "Item"
           }
         })
       );
+
+      // Step 3: Notify borrower that owner wants to negotiate (secondary - can fail without blocking)
+      // This runs in the background and doesn't block the chat from opening
+      API.post(`/rent/negotiate/${txId}/chat-now`)
+        .then(response => {
+          // If we got productTitle from backend, dispatch event to update chat header
+          if (response.data?.productTitle) {
+            window.dispatchEvent(
+              new CustomEvent("updateChatProductTitle", {
+                detail: {
+                  transactionId: txId,
+                  productTitle: response.data.productTitle
+                }
+              })
+            );
+          }
+        })
+        .catch(notifyErr => {
+          console.warn("Failed to notify borrower:", notifyErr);
+        });
 
       onClose();
     } catch (err) {

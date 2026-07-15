@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
 import wishesRoutes from "./routes/wishes.js";
+import Product from "./models/Product.js";
 import Notification from "./models/Notification.js";
 import Transaction from "./models/Transaction.js";
 
@@ -25,10 +26,12 @@ const app = express();
 
 // ✅ Middleware
 
-// CORS
+// CORS - Allow Vercel frontend and localhost for development
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: process.env.NODE_ENV === "production"
+      ? ["https://rentit-frontend.vercel.app", "https://rentit.vercel.app"]
+      : "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   })
@@ -258,5 +261,5 @@ registerChatSocketHandlers(io);
 app.set('io', io);
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT} 🚀`);
+  console.log(`Server running on port ${PORT} 🚀`);
 });

@@ -22,7 +22,6 @@ import { createAuction } from "../services/auctionService.js";
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
 import { sendMail } from "../utils/mailer.js";
-import.meta.env.VITE_API_URL;
 const router = express.Router();
 
 const isOwner = (transaction, userId) => transaction.owner?.toString() === userId;
@@ -1635,7 +1634,7 @@ router.post("/auction/:productId/bid", verifyToken, async (req, res) => {
 
     // Internal redirect — call the auction controller's bid handler via a sub-request
     const token = req.headers['authorization'];
-    const backendUrl = `http://localhost:${process.env.PORT || 5000}/api/auctions/${auction._id}/bid`;
+    const backendUrl = `/api/auctions/${auction._id}/bid`;
 
     const result = await axios.post(backendUrl, {
       amount,

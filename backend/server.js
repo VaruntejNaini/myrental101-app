@@ -27,13 +27,25 @@ const app = express();
 // ✅ Middleware
 
 // CORS - Allow Vercel frontend and localhost for development
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://rentit101.vercel.app",
+  "https://rentit101-pur1wvs3g-varuncode7-5379s-projects.vercel.app",
+];
+
 app.use(
   cors({
-    origin: process.env.NODE_ENV === "production"
-      ? ["https://rentit-frontend.vercel.app", "https://rentit.vercel.app"]
-      : "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   })
 );
 

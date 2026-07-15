@@ -171,33 +171,41 @@ router.post("/login", async (req, res) => {
 // =========================
 
 router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
+  console.log("========== SEND EMAIL OTP ==========");
+
   try {
     const { email } = req.body;
 
-    // FIND USER
+    console.log("Email:", email);
+
     const user = await User.findOne({ email });
+
     if (!user) {
+      console.log("❌ User not found");
       return res.status(404).json({
         msg: "User not found",
       });
     }
 
-    // GENERATE OTP
+    console.log("✅ User found");
+
     const otp = createOtp();
 
-    // HASH AND SAVE OTP
+    console.log("Generated OTP:", otp);
+
     const hashedOtp = await bcrypt.hash(otp, 10);
+
     user.emailOtp = hashedOtp;
     user.emailOtpExpiry = new Date(Date.now() + OTP_TTL_MS);
     user.emailOtpAttempts = 0;
+
     await user.save();
 
-console.log("User found:", email);
-console.log("OTP generated.");
-console.log("OTP saved to database.");
-console.log("Calling sendMail...");
+    console.log("✅ OTP saved");
 
-await sendMail({
+    console.log("Calling sendMail()...");
+
+    await sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Verification OTP",
@@ -210,26 +218,27 @@ await sendMail({
         </div>
       `,
     });
-    console.log("sendMail completed successfully.");
 
-    // RESPONSE
-    res.json({
+    console.log("✅ sendMail() returned");
+
+    return res.json({
       msg: "Email OTP sent successfully",
     });
-
   } catch (err) {
-  console.error("========== SEND OTP ERROR ==========");
-  console.error(err);
-  console.error(err.stack);
-  console.error("EMAIL_USER =", process.env.EMAIL_USER);
-  console.error("EMAIL_PASS exists =", !!process.env.EMAIL_PASS);
-  console.error("====================================");
+    console.error("==================================");
+    console.error("SEND EMAIL OTP FAILED");
+    console.error(err);
+    console.error(err.stack);
+    console.error("EMAIL_USER:", process.env.EMAIL_USER);
+    console.error("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+    console.error("==================================");
 
-  return res.status(500).json({
-    msg: "Failed to send OTP",
-    error: err.message,
-  });
-}});
+    return res.status(500).json({
+      msg: "Failed to send OTP",
+      error: err.message,
+    });
+  }
+});
 
 
 // =========================

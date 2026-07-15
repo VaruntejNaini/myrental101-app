@@ -23,6 +23,7 @@ import http from "http";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
+app.set("trust proxy", 1);
 
 // ✅ Middleware
 
@@ -42,10 +43,10 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      callback(new Error("Not allowed by CORS"));
     },
-    credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
   })
 );
 

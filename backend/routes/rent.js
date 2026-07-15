@@ -22,7 +22,7 @@ import { createAuction } from "../services/auctionService.js";
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
 import { sendMail } from "../utils/mailer.js";
-
+import.meta.env.VITE_API_URL;
 const router = express.Router();
 
 const isOwner = (transaction, userId) => transaction.owner?.toString() === userId;

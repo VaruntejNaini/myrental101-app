@@ -1,12 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED FRONTEND SOCKET SERVICE
-// Singleton managed socket connection for the application.
-// Chat manages transaction rooms; this module manages connection/auth lifecycle.
-// ─────────────────────────────────────────────────────────────────────────────
 import { io } from "socket.io-client";
 import { STORAGE_KEYS } from "../constants/auth";
 
-const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+const SOCKET_URL = import.meta.env.VITE_API_URL.replace("/api", "");
 
 let socket = null;
 

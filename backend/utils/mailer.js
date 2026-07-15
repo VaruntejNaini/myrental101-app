@@ -1,32 +1,53 @@
-import dns from "node:dns";
 import nodemailer from "nodemailer";
-
-// Prefer IPv4 to avoid IPv6 connectivity issues on some cloud platforms
-dns.setDefaultResultOrder("ipv4first");
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
-  secure: false, // STARTTLS
+  secure: false,
+  family: 4,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 15000,
 });
 
 transporter
   .verify()
   .then(() => {
-    console.log("Nodemailer transporter verified ✅");
+    console.log("✅ Nodemailer transporter verified");
   })
   .catch((err) => {
-    console.error("========== NODEMAILER ERROR ==========");
+    console.error("❌ Nodemailer verify failed");
     console.error(err);
-    console.error("EMAIL_USER:", process.env.EMAIL_USER);
-    console.error("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
-    console.error("======================================");
   });
 
-const sendMail = (mailOptions) => transporter.sendMail(mailOptions);
+const sendMail = async (mailOptions) => {
+  console.log("======================================");
+  console.log("📨 sendMail() called");
+  console.log("To:", mailOptions.to);
+  console.log("Subject:", mailOptions.subject);
+  console.log("EMAIL_USER:", process.env.EMAIL_USER);
+  console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+  console.log("======================================");
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log("✅ Email sent successfully");
+    console.log("Message ID:", info.messageId);
+    console.log("Accepted:", info.accepted);
+    console.log("Rejected:", info.rejected);
+
+    return info;
+  } catch (err) {
+    console.error("❌ transporter.sendMail() failed");
+    console.error(err);
+    throw err;
+  }
+};
 
 export { transporter, sendMail };

@@ -192,8 +192,12 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
     user.emailOtpAttempts = 0;
     await user.save();
 
-    // SEND EMAIL with raw plain-text OTP
-    await sendMail({
+console.log("User found:", email);
+console.log("OTP generated.");
+console.log("OTP saved to database.");
+console.log("Calling sendMail...");
+
+await sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Verification OTP",
@@ -206,6 +210,7 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
         </div>
       `,
     });
+    console.log("sendMail completed successfully.");
 
     // RESPONSE
     res.json({
@@ -213,13 +218,18 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("SEND OTP ERROR:", err.message || err);
-    res.status(500).json({
-      msg: "Failed to send OTP",
-      error: err.message || "Unknown error",
-    });
-  }
-});
+  console.error("========== SEND OTP ERROR ==========");
+  console.error(err);
+  console.error(err.stack);
+  console.error("EMAIL_USER =", process.env.EMAIL_USER);
+  console.error("EMAIL_PASS exists =", !!process.env.EMAIL_PASS);
+  console.error("====================================");
+
+  return res.status(500).json({
+    msg: "Failed to send OTP",
+    error: err.message,
+  });
+}});
 
 
 // =========================

@@ -21,7 +21,8 @@ const sendMail = async (mailOptions) => {
 
   // Build the transporter using env vars — never hard-code credentials
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    service: "smtp.gmail.com",
+    connectionTimeout: 10000, // 10 seconds limit
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,

@@ -1,60 +1,73 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 /**
- * sendMail — Sends a transactional email via Gmail SMTP.
+ * sendMail — Sends a transactional email via Resend's HTTP API.
  *
- * Callers (auth.js, rent.js) pass a mailOptions object containing:
- *   { from, to, subject, html, otp }
+ * WHY NOT NODEMAILER + GMAIL SMTP?
+ * Render's free tier blocks all outbound SMTP connections on ports 25, 465
+ * and 587 at the network level (enforced since Sep 26 2025). No nodemailer
+ * config can work around this — the TCP socket never leaves the container.
+ * Resend uses HTTPS (port 443) which is never blocked.
  *
- * Credentials are read from environment variables (EMAIL_USER / EMAIL_PASS).
- * A new transporter is created per call so the module stays stateless and
- * works correctly across hot-reloads in development.
+ * REQUIRED ENV VARS (set in Render dashboard):
+ *   RESEND_API_KEY    — your Resend API key (re_xxxxxx...)
+ *   RESEND_FROM_EMAIL — verified sender address, e.g. onboarding@resend.dev
+ *                       or noreply@yourdomain.com once domain is verified
+ *
+ * Callers (auth.js, rent.js) pass a mailOptions object:
+ *   { from?, to, subject, html?, text?, otp? }
  */
 const sendMail = async (mailOptions) => {
   console.log("======================================");
-  console.log("📨 sendMail() called");
+  console.log("📨 sendMail() called [via Resend HTTP API]");
   console.log("To:", mailOptions.to);
   console.log("Subject:", mailOptions.subject);
-  console.log("EMAIL_USER:", process.env.EMAIL_USER);
-  console.log("EMAIL_PASS set:", !!process.env.EMAIL_PASS);
+  console.log("RESEND_API_KEY set:", !!process.env.RESEND_API_KEY);
+  console.log("RESEND_FROM_EMAIL:", process.env.RESEND_FROM_EMAIL);
   console.log("======================================");
 
-  // Build the transporter using env vars — never hard-code credentials
-  const transporter = nodemailer.createTransport({
-    service: "smtp.gmail.com",
-    connectionTimeout: 10000, // 10 seconds limit
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error(
+      "RESEND_API_KEY environment variable is not set. " +
+      "Please add it in your Render dashboard under Environment Variables."
+    );
+  }
 
-  // Compose the outgoing message, preserving whatever the caller supplied
-  const message = {
-    from: mailOptions.from || process.env.EMAIL_USER,
-    to: mailOptions.to,
-    subject: mailOptions.subject || "Notification",
-    // Use html if provided, otherwise fall back to plain text
-    ...(mailOptions.html
-      ? { html: mailOptions.html }
-      : {
-          text:
-            mailOptions.text ||
-            (mailOptions.otp
-              ? `Your OTP is ${mailOptions.otp}. It is valid for 10 minutes.`
-              : ""),
-        }),
-  };
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  // Build the email body — prefer html, fall back to text / otp template
+  const emailBody = mailOptions.html
+    ? { html: mailOptions.html }
+    : {
+        text:
+          mailOptions.text ||
+          (mailOptions.otp
+            ? `Your OTP is ${mailOptions.otp}. It is valid for 10 minutes.`
+            : ""),
+      };
 
   try {
-    // sendMail returns a Promise when no callback is passed — fully awaitable
-    const info = await transporter.sendMail(message);
-    console.log("✅ Email sent successfully");
-    console.log("Message ID:", info.messageId);
-    console.log("Accepted:", info.accepted);
-    return info;
+    const { data, error } = await resend.emails.send({
+      from:
+        mailOptions.from ||
+        process.env.RESEND_FROM_EMAIL ||
+        "onboarding@resend.dev",
+      to: [mailOptions.to],
+      subject: mailOptions.subject || "Notification",
+      ...emailBody,
+    });
+
+    if (error) {
+      // Resend returns errors in the response body rather than throwing
+      console.error("❌ Resend API returned an error:", error);
+      throw new Error(error.message || "Email send failed via Resend");
+    }
+
+    console.log("✅ Email sent successfully via Resend");
+    console.log("Email ID:", data?.id);
+    return data;
   } catch (err) {
-    console.error("❌ transporter.sendMail() failed");
+    console.error("❌ sendMail() failed");
     console.error(err);
     throw err;
   } finally {

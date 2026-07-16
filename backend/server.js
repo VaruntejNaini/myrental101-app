@@ -1,3 +1,6 @@
+import dns from "node:dns";
+
+dns.setDefaultResultOrder("ipv4first");
 import "dotenv/config";
 import express from "express";
 import mongoose from "mongoose";
@@ -21,6 +24,7 @@ import { initAuctionScheduler } from "./services/auctionSchedulerService.js";
 import http from "http";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 const app = express();
 app.set("trust proxy", 1);

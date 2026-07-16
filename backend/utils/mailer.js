@@ -36,6 +36,8 @@ const sendMail = async (mailOptions) => {
   console.log("======================================");
 
   try {
+
+    console.log("✅ transporter.sendMail() called inside the try block");
     const info = await transporter.sendMail(mailOptions);
 
     console.log("✅ Email sent successfully");

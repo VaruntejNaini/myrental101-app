@@ -32,12 +32,12 @@ const sendMail = async (mailOptions) => {
   console.log("To:", mailOptions.to);
   console.log("Subject:", mailOptions.subject);
   console.log("EMAIL_USER:", process.env.EMAIL_USER);
-  console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+  console.log("EMAIL_PASS:", process.env.EMAIL_PASS);
   console.log("======================================");
 
   try {
 
-    console.log("✅ transporter.sendMail() called inside the try block");
+    console.log("✅ transporter.sendMail() called inside the try block", transporter);
     const info = await transporter.sendMail(mailOptions);
 
     console.log("✅ Email sent successfully");
@@ -50,6 +50,8 @@ const sendMail = async (mailOptions) => {
     console.log("❌ transporter.sendMail() failed");
     console.log(err);
     throw err;
+  } finally {
+    console.log("=================inside finally=====================");
   }
 };
 

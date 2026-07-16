@@ -45,8 +45,8 @@ const sendMail = async (mailOptions) => {
 
     return info;
   } catch (err) {
-    console.error("❌ transporter.sendMail() failed");
-    console.error(err);
+    console.log("❌ transporter.sendMail() failed");
+    console.log(err);
     throw err;
   }
 };

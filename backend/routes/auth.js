@@ -217,6 +217,7 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
           <p>Please enter this OTP to verify your account.</p>
         </div>
       `,
+      otp,
     });
 
     console.log("✅ sendMail() returned");

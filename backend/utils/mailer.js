@@ -1,85 +1,64 @@
 import nodemailer from "nodemailer";
 
-import dns from "node:dns";
-// const transporter = nodemailer.createTransport({
-//   host: "smtp.gmail.com",
-//   port: 465,
-//   secure: true,
-
-//   auth: {
-//     user: process.env.EMAIL_USER,
-//     pass: process.env.EMAIL_PASS,
-//   },
-
-//   lookup(hostname, options, callback) {
-//     return dns.lookup(hostname, { family: 4 }, callback);
-//   },
-// });
-
-let OTPGenerateAndSendToUser = async (email) => {
-	const otp = Math.floor(1000 + Math.random() * 9000);
-	const transporter = nodemailer.createTransport({
-		service: "gmail",
-		auth: {
-			user: "bg5050525@gmail.com",
-			pass: "vqxn zycm bovh xexf",
-		},
-	});
-	const mailOptions = {
-		from: "bg5050525@gmail.com",
-		to: email,
-		subject: "Your OTP for Verification",
-		text: `Your OTP is ${otp}. It is valid for 10 minutes.`,
-	};
-	transporter.sendMail(mailOptions, (error, info) => {
-		if (error) {
-      console.log("Failed to send OTP via email");
-			// return res.status(500).json(new ApiResponse(500, null, "Failed to send OTP via email"));
-		} else {
-      console.log("OTP sent successfully via email");
-			// return checkMailIsPresent(otp, email, res);
-		}
-	});
-};
-/*transporter
-  .verify()
-  .then(() => {
-    console.log("✅ Nodemailer transporter verified");
-  })
-  .catch((err) => {
-    console.error("❌ Nodemailer verify failed");
-    console.error(err);
-  });
-*/
-
+/**
+ * sendMail — Sends a transactional email via Gmail SMTP.
+ *
+ * Callers (auth.js, rent.js) pass a mailOptions object containing:
+ *   { from, to, subject, html, otp }
+ *
+ * Credentials are read from environment variables (EMAIL_USER / EMAIL_PASS).
+ * A new transporter is created per call so the module stays stateless and
+ * works correctly across hot-reloads in development.
+ */
 const sendMail = async (mailOptions) => {
   console.log("======================================");
   console.log("📨 sendMail() called");
   console.log("To:", mailOptions.to);
   console.log("Subject:", mailOptions.subject);
   console.log("EMAIL_USER:", process.env.EMAIL_USER);
-  console.log("EMAIL_PASS:", process.env.EMAIL_PASS);
+  console.log("EMAIL_PASS set:", !!process.env.EMAIL_PASS);
   console.log("======================================");
 
+  // Build the transporter using env vars — never hard-code credentials
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  // Compose the outgoing message, preserving whatever the caller supplied
+  const message = {
+    from: mailOptions.from || process.env.EMAIL_USER,
+    to: mailOptions.to,
+    subject: mailOptions.subject || "Notification",
+    // Use html if provided, otherwise fall back to plain text
+    ...(mailOptions.html
+      ? { html: mailOptions.html }
+      : {
+          text:
+            mailOptions.text ||
+            (mailOptions.otp
+              ? `Your OTP is ${mailOptions.otp}. It is valid for 10 minutes.`
+              : ""),
+        }),
+  };
+
   try {
-
-    await OTPGenerateAndSendToUser(mailOptions.to);
-    // console.log("✅ transporter.sendMail() called inside the try block", transporter);
-    // const info = await transporter.sendMail(mailOptions);
-
-    // console.log("✅ Email sent successfully");
-    // console.log("Message ID:", info.messageId);
-    // console.log("Accepted:", info.accepted);
-    // console.log("Rejected:", info.rejected);
-
-    // return info;
+    // sendMail returns a Promise when no callback is passed — fully awaitable
+    const info = await transporter.sendMail(message);
+    console.log("✅ Email sent successfully");
+    console.log("Message ID:", info.messageId);
+    console.log("Accepted:", info.accepted);
+    return info;
   } catch (err) {
-    console.log("❌ transporter.sendMail() failed");
-    console.log(err);
+    console.error("❌ transporter.sendMail() failed");
+    console.error(err);
     throw err;
   } finally {
     console.log("=================inside finally=====================");
   }
 };
 
-export { transporter, sendMail };
+export { sendMail };

@@ -1,13 +1,20 @@
 import nodemailer from "nodemailer";
 
+import dns from "node:dns";
+import nodemailer from "nodemailer";
+
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
   secure: true,
-  family: 4,
+
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
+  },
+
+  lookup(hostname, options, callback) {
+    return dns.lookup(hostname, { family: 4 }, callback);
   },
 });
 /*transporter

@@ -32,8 +32,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://rentit101.vercel.app",
   "https://rentit101-pur1wvs3g-varuncode7-5379s-projects.vercel.app",
+  "https://833s2z9x-5173.inc1.devtunnels.ms",
 ];
-
 app.use(
   cors({
     origin(origin, callback) {

@@ -1,82 +1,74 @@
-import { Resend } from "resend";
-
 /**
- * sendMail — Sends a transactional email via Resend's HTTP API.
+ * backend/utils/mailer.js
  *
- * WHY NOT NODEMAILER + GMAIL SMTP?
- * Render's free tier blocks all outbound SMTP connections on ports 25, 465
- * and 587 at the network level (enforced since Sep 26 2025). No nodemailer
- * config can work around this — the TCP socket never leaves the container.
- * Resend uses HTTPS (port 443) which is never blocked.
+ * Temporary debugging version using the Resend HTTP API directly via fetch().
+ * This bypasses the Resend SDK completely.
  *
- * REQUIRED ENV VARS (set in Render dashboard):
- *   RESEND_API_KEY    — your Resend API key (re_xxxxxx...)
- *   RESEND_FROM_EMAIL — verified sender address, e.g. onboarding@resend.dev
- *                       or noreply@yourdomain.com once domain is verified
- *
- * Callers (auth.js, rent.js) pass a mailOptions object:
- *   { from?, to, subject, html?, text?, otp? }
+ * IMPORTANT:
+ * After debugging, revoke the exposed API key and remove any logs that print it.
  */
+
 const sendMail = async (mailOptions) => {
   console.log("======================================");
-  console.log("📨 sendMail() called [via Resend HTTP API]");
+  console.log("📨 sendMail() called [via Resend HTTP API - fetch]");
   console.log("To:", mailOptions.to);
   console.log("Subject:", mailOptions.subject);
   console.log("RESEND_API_KEY set:", !!process.env.RESEND_API_KEY);
- console.log("RESEND_API_KEY:", process.env.RESEND_API_KEY);
-console.log(
-  "RESEND_API_KEY length:",
-  process.env.RESEND_API_KEY?.length
-);
+  console.log("RESEND_API_KEY:", JSON.stringify(process.env.RESEND_API_KEY));
+  console.log(
+    "RESEND_API_KEY length:",
+    process.env.RESEND_API_KEY?.length
+  );
   console.log("RESEND_FROM_EMAIL:", process.env.RESEND_FROM_EMAIL);
   console.log("======================================");
 
   if (!process.env.RESEND_API_KEY) {
-    throw new Error(
-      "RESEND_API_KEY environment variable is not set. " +
-      "Please add it in your Render dashboard under Environment Variables."
-    );
+    throw new Error("RESEND_API_KEY environment variable is not set.");
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  // Build the email body — prefer html, fall back to text / otp template
-  const emailBody = mailOptions.html
-    ? { html: mailOptions.html }
-    : {
-        text:
-          mailOptions.text ||
-          (mailOptions.otp
-            ? `Your OTP is ${mailOptions.otp}. It is valid for 10 minutes.`
-            : ""),
-      };
-
-  try {
-    const { data, error } = await resend.emails.send({
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       from:
         mailOptions.from ||
         process.env.RESEND_FROM_EMAIL ||
         "onboarding@resend.dev",
+
       to: [mailOptions.to],
+
       subject: mailOptions.subject || "Notification",
-      ...emailBody,
-    });
 
-    if (error) {
-      // Resend returns errors in the response body rather than throwing
-      console.error("❌ Resend API returned an error:", error);
-      throw new Error(error.message || "Email send failed via Resend");
-    }
+      html:
+        mailOptions.html ||
+        `<p>Your OTP is <b>${mailOptions.otp}</b>. It is valid for 10 minutes.</p>`,
+    }),
+  });
 
-    console.log("✅ Email sent successfully via Resend");
-    console.log("Email ID:", data?.id);
+  const responseBody = await response.text();
+
+  console.log("======================================");
+  console.log("HTTP Status:", response.status);
+  console.log("HTTP Response:", responseBody);
+  console.log("======================================");
+
+  if (!response.ok) {
+    throw new Error(`Resend HTTP Error: ${responseBody}`);
+  }
+
+  try {
+    const data = JSON.parse(responseBody);
+
+    console.log("✅ Email sent successfully!");
+    console.log("Email ID:", data.id);
+
     return data;
   } catch (err) {
-    console.error("❌ sendMail() failed");
-    console.error(err);
+    console.error("Failed to parse Resend response:", err);
     throw err;
-  } finally {
-    console.log("=================inside finally=====================");
   }
 };
 

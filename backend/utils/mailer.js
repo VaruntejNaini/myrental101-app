@@ -23,6 +23,14 @@ const sendMail = async (mailOptions) => {
   console.log("To:", mailOptions.to);
   console.log("Subject:", mailOptions.subject);
   console.log("RESEND_API_KEY set:", !!process.env.RESEND_API_KEY);
+  console.log(
+  "RESEND_API_KEY prefix:",
+  process.env.RESEND_API_KEY?.substring(0, 10)
+);
+console.log(
+  "RESEND_API_KEY length:",
+  process.env.RESEND_API_KEY?.length
+);
   console.log("RESEND_FROM_EMAIL:", process.env.RESEND_FROM_EMAIL);
   console.log("======================================");
 

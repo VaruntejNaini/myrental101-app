@@ -205,9 +205,9 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
 
     console.log("Calling sendMail()...");
 
-    await sendMail({
-      from: process.env.RESEND_FROM_EMAIL,
-      to: email,
+     await sendMail({
+       from: process.env.EMAIL_USER,
+       to: email,
       subject: "Your Verification OTP",
       html: `
         <div style="font-family:sans-serif">
@@ -226,13 +226,11 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
       msg: "Email OTP sent successfully",
     });
   } catch (err) {
-    console.error("==================================");
-    console.error("SEND EMAIL OTP FAILED");
-    console.error(err);
-    console.error(err.stack);
-    console.error("RESEND_FROM_EMAIL:", process.env.RESEND_FROM_EMAIL);
-    console.error("RESEND_API_KEY set:", !!process.env.RESEND_API_KEY);
-    console.error("==================================");
+     console.error("==================================");
+     console.error("SEND EMAIL OTP FAILED");
+     console.error(err);
+     console.error(err.stack);
+     console.error("==================================");
 
     return res.status(500).json({
       msg: "Failed to send OTP",

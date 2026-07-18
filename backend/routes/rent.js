@@ -1229,7 +1229,7 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
 
     try {
       await sendMail({
-        from: process.env.RESEND_FROM_EMAIL,
+        from: process.env.EMAIL_USER,
         to: receiver.email,
         subject: otpType === "HANDOFF" ? "Your Handoff OTP" : "Your Return OTP",
         html: `

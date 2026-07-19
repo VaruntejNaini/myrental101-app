@@ -1,8 +1,8 @@
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { getSESClient } from "./sesClient.js";
-import { getVerificationTemplate } from "../templates/verification.js";
-import { getPasswordResetTemplate } from "../templates/passwordReset.js";
-import { getTransactionOtpTemplate } from "../templates/transactionOtp.js";
+import { getVerificationTemplate } from "./templates/verification.js";
+import { getPasswordResetTemplate } from "./templates/passwordReset.js";
+import { getTransactionOtpTemplate } from "./templates/transactionOtp.js";
 import { getEmailConfig } from "../../config/email.js";
 
 const EMAIL_TIMEOUT_MS = 15000;

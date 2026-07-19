@@ -6,7 +6,7 @@ import { OAuth2Client } from "google-auth-library";
 
 import User from "../models/User.js";
 import { verifyToken } from "../middleware/auth.js";
-import { sendMail } from "../utils/mailer.js";
+import { sendOTPEmail } from "../services/email/emailService.js";
 
 const router = express.Router();
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -38,10 +38,10 @@ const otpRequestLimiter = rateLimit({
 
 
 // =========================
-// NODEMAILER SETUP
+// EMAIL SERVICE (AWS SES)
 // =========================
 
-// Shared transporter is initialized in ../utils/mailer.js
+// Email delivery is handled by ../services/email/emailService.js
 
 // =========================
 // REGISTER
@@ -205,20 +205,11 @@ router.post("/send-email-otp", otpRequestLimiter, async (req, res) => {
 
     console.log("Calling sendMail()...");
 
-     await sendMail({
-       from: process.env.EMAIL_USER,
+     await sendOTPEmail({
        to: email,
-      subject: "Your Verification OTP",
-      html: `
-        <div style="font-family:sans-serif">
-          <h2>Email Verification</h2>
-          <p>Your OTP is:</p>
-          <h1>${otp}</h1>
-          <p>Please enter this OTP to verify your account.</p>
-        </div>
-      `,
-      otp,
-    });
+       otp,
+       type: "EMAIL_VERIFICATION",
+     });
 
     console.log("✅ sendMail() returned");
 

@@ -6,6 +6,7 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { validateEmailConfig } from "./config/email.js";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
 import wishesRoutes from "./routes/wishes.js";
@@ -25,6 +26,9 @@ import http from "http";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+
+// Validate email configuration on startup (fail fast if missing AWS SES config)
+validateEmailConfig();
 
 const app = express();
 app.set("trust proxy", 1);

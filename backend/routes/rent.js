@@ -21,7 +21,7 @@ import { createAuction } from "../services/auctionService.js";
 
 import { upload } from "../middleware/upload.js";
 import { uploadToCloudinary, cloudinary } from "../utils/cloudinary.js";
-import { sendMail } from "../utils/mailer.js";
+import { sendTransactionOTPEmail } from "../services/email/emailService.js";
 const router = express.Router();
 
 const isOwner = (transaction, userId) => transaction.owner?.toString() === userId;
@@ -1228,20 +1228,12 @@ router.post("/transaction/:id/generate-otp", verifyToken, async (req, res) => {
     }
 
     try {
-      await sendMail({
-        from: process.env.EMAIL_USER,
-        to: receiver.email,
-        subject: otpType === "HANDOFF" ? "Your Handoff OTP" : "Your Return OTP",
-        html: `
-          <div style="font-family:sans-serif; line-height:1.5;">
-            <h2>${otpType === "HANDOFF" ? "Item Handoff Verification" : "Item Return Verification"}</h2>
-            <p>Hello ${receiverName},</p>
-            <p>Your ${otpType === "HANDOFF" ? "handoff" : "return"} OTP for "${productTitle}" is:</p>
-            <h1>${rawOtp}</h1>
-            <p>Please share this code only for the intended ${otpType === "HANDOFF" ? "handoff" : "return"} verification. It expires in 10 minutes.</p>
-          </div>
-        `,
-      });
+     await sendTransactionOTPEmail({
+       to: receiver.email,
+       otp: rawOtp,
+       type: otpType,
+       productTitle,
+     });
     } catch (mailErr) {
       if (otpType === "HANDOFF") {
         transaction.handoffOtpHash = undefined;

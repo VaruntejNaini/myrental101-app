@@ -1,12 +1,11 @@
 // Email configuration validator
-// Validates AWS SES environment variables during server startup
+// Validates Resend environment variables during server startup
 // Fails fast if any required variable is missing
 
 const REQUIRED_ENV_VARS = [
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_REGION",
-  "AWS_SES_FROM",
+  "EMAIL_PROVIDER",
+  "RESEND_API_KEY",
+  "EMAIL_FROM",
 ];
 
 export function validateEmailConfig() {
@@ -22,7 +21,18 @@ export function validateEmailConfig() {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
 
-  console.log("✓ AWS SES configuration loaded successfully");
+  const fromEmail = process.env.EMAIL_FROM;
+  const apiKey = process.env.RESEND_API_KEY;
+
+  console.log("\n========================================");
+  console.log("EMAIL SERVICE");
+  console.log("========================================");
+  console.log(`Provider : Resend`);
+  console.log(`Transport: HTTP API`);
+  console.log(`From      : ${fromEmail}`);
+  console.log("");
+  console.log(`✓ Resend client initialized`);
+
   return true;
 }
 
@@ -30,9 +40,7 @@ export function getEmailConfig() {
   validateEmailConfig();
 
   return {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: process.env.AWS_REGION,
-    fromEmail: process.env.AWS_SES_FROM,
+    fromEmail: process.env.EMAIL_FROM,
+    resendApiKey: process.env.RESEND_API_KEY,
   };
 }

@@ -37,7 +37,7 @@ app.set("trust proxy", 1);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CLIENT_DIST = path.resolve(__dirname, "../frontend/dist");
+const CLIENT_DIST = path.resolve(__dirname, "public");
 
 // ✅ Middleware
 

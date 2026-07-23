@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend"
+    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend && node -e \"const fs=require('fs');const path=require('path');fs.cpSync(path.resolve('../frontend/dist'), path.resolve('public'), {recursive:true});\""
   },
   "keywords": [],
   "author": "",

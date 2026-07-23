@@ -39,40 +39,24 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:5173",
   "https://rentit101.vercel.app",
-  "https://rentit101-pur1wvs3g-varuncode7-5379s-projects.vercel.app",
-  "https://833s2z9x-5173.inc1.devtunnels.ms",
+  "https://rentit-frontend.vercel.app", // if you have a permanent domain
+  "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
 ];
-/*app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      callback(new Error("Not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-    credentials: true,
-  })
-);*/
 app.use(
   cors({
     origin(origin, callback) {
-      console.log("Incoming Origin:", origin);
-
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.log("Blocked Origin:", origin);
-      callback(new Error("Not allowed by CORS"));
+      return callback(new Error("Not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 

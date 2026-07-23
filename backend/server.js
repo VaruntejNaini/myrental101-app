@@ -6,6 +6,8 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { fileURLToPath } from "node:url";
+import path from "path";
 import { validateEmailConfig } from "./config/email.js";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
@@ -33,6 +35,10 @@ validateEmailConfig();
 const app = express();
 app.set("trust proxy", 1);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CLIENT_DIST = path.resolve(__dirname, "../frontend/dist");
+
 // ✅ Middleware
 
 // CORS - Allow Vercel frontend and localhost for development
@@ -43,13 +49,17 @@ const allowedOrigins = [
   "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
 ];
 
+if (process.env.NODE_ENV !== "production") {
   app.use(
     cors({
       origin(origin, callback) {
-        const normalizedOrigin = origin?.replace(/\/$/, "");
-        if (!normalizedOrigin) return callback(null, true);
+        console.log("Incoming Origin:", origin);
+        console.log("Allowed Origins:", allowedOrigins);
+        console.log("Match:", allowedOrigins.includes(origin));
 
-        if (allowedOrigins.includes(normalizedOrigin)) {
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
 
@@ -60,6 +70,7 @@ const allowedOrigins = [
       allowedHeaders: ["Content-Type", "Authorization"],
     })
   );
+}
 
 // JSON parser
 app.use(express.json({ limit: "50mb" }));
@@ -97,7 +108,7 @@ mongoose
 // ✅ Routes
 
 // Health Route
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.send("RentIt API is running 🚀");
 });
 
@@ -113,6 +124,10 @@ app.use("/api/rent", rentRoutes);
 app.use("/api/wishes", wishesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auctions", auctionRoutes);
+
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(CLIENT_DIST));
+}
 
 // Clean up Mock Database listings on startup (deletes mock IDs and preserves user listings)
 const cleanMockDatabase = async () => {
@@ -262,6 +277,16 @@ ${message}
   }
 });
 
+
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
+      res.sendFile(path.join(CLIENT_DIST, "index.html"));
+    } else {
+      res.status(404).send("Not Found");
+    }
+  });
+}
 
 // --- global JSON error handler for uploads and other errors
 app.use((err, req, res, next) => {

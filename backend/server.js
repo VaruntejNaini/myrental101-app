@@ -43,22 +43,23 @@ const allowedOrigins = [
   "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
 ];
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
+  app.use(
+    cors({
+      origin(origin, callback) {
+        const normalizedOrigin = origin?.replace(/\/$/, "");
+        if (!normalizedOrigin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+        if (allowedOrigins.includes(normalizedOrigin)) {
+          return callback(null, true);
+        }
 
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+        return callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
 
 // JSON parser
 app.use(express.json({ limit: "50mb" }));

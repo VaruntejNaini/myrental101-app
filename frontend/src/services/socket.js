@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
 import { STORAGE_KEYS } from "../constants/auth";
 
-const SOCKET_URL = import.meta.env.VITE_API_URL.replace("/api", "");
+const SOCKET_URL = "";
 
 let socket = null;
 

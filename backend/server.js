@@ -42,7 +42,7 @@ const allowedOrigins = [
   "https://rentit101-pur1wvs3g-varuncode7-5379s-projects.vercel.app",
   "https://833s2z9x-5173.inc1.devtunnels.ms",
 ];
-app.use(
+/*app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
@@ -51,6 +51,24 @@ app.use(
         return callback(null, true);
       }
 
+      callback(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  })
+);*/
+app.use(
+  cors({
+    origin(origin, callback) {
+      console.log("Incoming Origin:", origin);
+
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked Origin:", origin);
       callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],

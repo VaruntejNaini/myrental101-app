@@ -63,6 +63,12 @@ if (process.env.NODE_ENV !== "production") {
           return callback(null, true);
         }
 
+        console.log("===== CORS DEBUG =====");
+        console.log("Incoming Origin:", origin);
+        console.log("Allowed Origins:", allowedOrigins);
+        console.log("NODE_ENV:", process.env.NODE_ENV);
+        console.log("======================");
+
         return callback(new Error("Not allowed by CORS"));
       },
       credentials: true,

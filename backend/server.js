@@ -99,6 +99,7 @@ mongoose
   })
   .then(() => {
     console.log("MongoDB Connected ✅");
+    console.log("Ready State:", mongoose.connection.readyState);
   })
   .catch((err) => {
     console.error("MongoDB Error ❌");

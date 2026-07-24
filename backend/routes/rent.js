@@ -292,6 +292,11 @@ router.get("/products", async (req, res) => {
       sortOption = null;
     }
 
+    console.log("========== Mongo Debug ==========");
+    console.log("Mongo Ready State:", mongoose.connection.readyState);
+    console.log("Database Name:", mongoose.connection.name);
+    console.log("================================");
+
     // 8. Pagination & Response Formatting
     if (paginated === "true") {
       const pageNum = Number(page) || 1;

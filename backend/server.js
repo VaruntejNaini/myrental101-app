@@ -45,38 +45,28 @@ const CLIENT_DIST = path.resolve(__dirname, "public");
 const allowedOrigins = [
   "http://localhost:5173",
   "https://rentit101.vercel.app",
-  "https://rentit-frontend.vercel.app", // if you have a permanent domain
+  "https://rentit-frontend.vercel.app",
   "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
+  "https://rentit-frontend-5dm5kv86e-varuncode7-5379s-projects.vercel.app" // Added the missing URL
 ];
 
-if (process.env.NODE_ENV !== "production") {
-  app.use(
-    cors({
-      origin(origin, callback) {
-        console.log("Incoming Origin:", origin);
-        console.log("Allowed Origins:", allowedOrigins);
-        console.log("Match:", allowedOrigins.includes(origin));
+// 1. Remove the production check so CORS applies to both environments
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
 
-        if (!origin) return callback(null, true);
+      // Check if the origin matches our list or matches Vercel's preview URL pattern
+      if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+        return callback(null, true);
+      }
 
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        }
-
-        console.log("===== CORS DEBUG =====");
-        console.log("Incoming Origin:", origin);
-        console.log("Allowed Origins:", allowedOrigins);
-        console.log("NODE_ENV:", process.env.NODE_ENV);
-        console.log("======================");
-
-        return callback(new Error("Not allowed by CORS"));
-      },
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization"],
-    })
-  );
-}
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
 // JSON parser
 app.use(express.json({ limit: "50mb" }));

@@ -675,14 +675,44 @@ export default function Dashboard() {
 
   const syncProducts = () => {
     // Fetch RENT products
+    console.log("=== DEBUG: Fetching RENT products ===");
+    console.log("Request URL:", window.location.origin + "/api/rent/products?productType=RENT");
     API.get("/rent/products", { params: { productType: "RENT" } })
-      .then(res => setDbProducts(res.data))
-      .catch(err => console.error("Error fetching db products:", err));
+      .then(res => {
+        console.log("=== DEBUG: RENT products response ===");
+        console.log("typeof res.data:", typeof res.data);
+        console.log("Array.isArray(res.data):", Array.isArray(res.data));
+        console.log("res.data:", res.data);
+        console.log("====================================");
+        setDbProducts(res.data);
+      })
+      .catch(err => {
+        console.log("=== DEBUG: RENT products error ===");
+        console.log("Error status:", err.response?.status);
+        console.log("Error response data:", err.response?.data);
+        console.log("==================================");
+        console.error("Error fetching db products:", err);
+      });
     
     // Fetch SECOND_HAND products for the landing page row
+    console.log("=== DEBUG: Fetching SECOND_HAND products ===");
+    console.log("Request URL:", window.location.origin + "/api/rent/products?productType=SECOND_HAND");
     API.get("/rent/products", { params: { productType: "SECOND_HAND" } })
-      .then(res => setSecondHandProducts(res.data))
-      .catch(err => console.error("Error fetching second-hand products:", err));
+      .then(res => {
+        console.log("=== DEBUG: SECOND_HAND products response ===");
+        console.log("typeof res.data:", typeof res.data);
+        console.log("Array.isArray(res.data):", Array.isArray(res.data));
+        console.log("res.data:", res.data);
+        console.log("====================================");
+        setSecondHandProducts(res.data);
+      })
+      .catch(err => {
+        console.log("=== DEBUG: SECOND_HAND products error ===");
+        console.log("Error status:", err.response?.status);
+        console.log("Error response data:", err.response?.data);
+        console.log("======================================");
+        console.error("Error fetching second-hand products:", err);
+      });
     
     syncMyProducts();
   };
@@ -1375,6 +1405,11 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
+            {console.log("=== DEBUG: Before dbProducts filter ===")}
+            {console.log("dbProducts:", dbProducts)}
+            {console.log("Array.isArray(dbProducts):", Array.isArray(dbProducts))}
+            {console.log("typeof dbProducts:", typeof dbProducts)}
+            {console.log("======================================")}
             {dbProducts.filter(p => p.productType === "RENT" && !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 
@@ -1496,6 +1531,11 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
+            {console.log("=== DEBUG: Before secondHandProducts filter ===")}
+            {console.log("secondHandProducts:", secondHandProducts)}
+            {console.log("Array.isArray(secondHandProducts):", Array.isArray(secondHandProducts))}
+            {console.log("typeof secondHandProducts:", typeof secondHandProducts)}
+            {console.log("===============================================")}
             {secondHandProducts.filter(p => !myProducts.map(x => x._id).includes(p._id)).map((item) => (
               <ProductCard 
                 key={item._id} 

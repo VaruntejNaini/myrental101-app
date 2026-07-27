@@ -405,6 +405,15 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
 
       await new Promise((resolve, reject) => {
         if (!currentSocket || currentSocket.connected !== true) {
+          console.log("[Socket] pre-send diagnostics:", {
+            hasSocket: !!currentSocket,
+            connected: currentSocket?.connected,
+            id: currentSocket?.id,
+            disconnected: currentSocket?.disconnected,
+            active: currentSocket?.active,
+            uri: currentSocket?.io?.uri,
+            transport: currentSocket?.io?.engine?.transport?.name,
+          });
           return reject(new Error("Socket not connected"));
         }
 

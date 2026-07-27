@@ -6,6 +6,8 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { fileURLToPath } from "node:url";
+import path from "path";
 import { validateEmailConfig } from "./config/email.js";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
@@ -33,27 +35,35 @@ validateEmailConfig();
 const app = express();
 app.set("trust proxy", 1);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CLIENT_DIST = path.resolve(__dirname, "public");
+
 // ✅ Middleware
 
 // CORS - Allow Vercel frontend and localhost for development
 const allowedOrigins = [
   "http://localhost:5173",
   "https://rentit101.vercel.app",
-  "https://rentit101-pur1wvs3g-varuncode7-5379s-projects.vercel.app",
-  "https://833s2z9x-5173.inc1.devtunnels.ms",
+  "https://rentit-frontend.vercel.app",
+  "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
+  "https://rentit-frontend-5dm5kv86e-varuncode7-5379s-projects.vercel.app" // Added the missing URL
 ];
+
+// 1. Remove the production check so CORS applies to both environments
 app.use(
   cors({
-    origin(origin, callback) {
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      // Check if the origin matches our list or matches Vercel's preview URL pattern
+      if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
         return callback(null, true);
       }
 
-      callback(new Error("Not allowed by CORS"));
+      return callback(new Error("Not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   })
 );
@@ -85,6 +95,7 @@ mongoose
   })
   .then(() => {
     console.log("MongoDB Connected ✅");
+    console.log("Ready State:", mongoose.connection.readyState);
   })
   .catch((err) => {
     console.error("MongoDB Error ❌");
@@ -94,7 +105,7 @@ mongoose
 // ✅ Routes
 
 // Health Route
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.send("RentIt API is running 🚀");
 });
 
@@ -110,6 +121,10 @@ app.use("/api/rent", rentRoutes);
 app.use("/api/wishes", wishesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auctions", auctionRoutes);
+
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(CLIENT_DIST));
+}
 
 // Clean up Mock Database listings on startup (deletes mock IDs and preserves user listings)
 const cleanMockDatabase = async () => {
@@ -259,6 +274,16 @@ ${message}
   }
 });
 
+
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
+      res.sendFile(path.join(CLIENT_DIST, "index.html"));
+    } else {
+      res.status(404).send("Not Found");
+    }
+  });
+}
 
 // --- global JSON error handler for uploads and other errors
 app.use((err, req, res, next) => {

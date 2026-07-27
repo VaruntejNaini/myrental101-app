@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend && node -e \"const fs=require('fs');const path=require('path');fs.cpSync(path.resolve('../frontend/dist'), path.resolve('public'), {recursive:true});\""
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
     "multer": "^2.1.1",
+    "nodemailer": "^6.10.1",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {

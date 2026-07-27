@@ -26,9 +26,13 @@ export default function ChatDrawer({ isOpen, onClose, refreshUnreadCount }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const currentUserId = localStorage.getItem(STORAGE_KEYS.TOKEN) 
-    ? JSON.parse(atob(localStorage.getItem(STORAGE_KEYS.TOKEN).split(".")[1])).id 
-    : null;
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    API.get("/auth/me")
+      .then(res => setCurrentUserId(res.data._id))
+      .catch(() => setCurrentUserId(null));
+  }, []);
 
   const fetchTransactions = async () => {
     try {

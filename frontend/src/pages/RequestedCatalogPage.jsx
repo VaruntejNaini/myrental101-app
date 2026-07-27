@@ -163,17 +163,13 @@ export default function RequestedCatalogPage() {
 
   useEffect(() => {
     syncWishes();
-    if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-      const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-      setBookmarkedIds(existing.map(x => x.id));
+    const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+    setBookmarkedIds(existing.map(x => x.id));
 
-      // Fetch logged in user profile
-      API.get("/auth/me")
-        .then(res => setCurrentUser(res.data))
-        .catch(err => console.error("Error fetching user profile:", err));
-    } else {
-      setBookmarkedIds([]);
-    }
+    // Fetch logged in user profile
+    API.get("/auth/me")
+      .then(res => setCurrentUser(res.data))
+      .catch(err => console.error("Error fetching user profile:", err));
   }, []);
 
   const triggerToast = (msg) => {

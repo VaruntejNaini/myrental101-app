@@ -1,5 +1,4 @@
 import { io } from "socket.io-client";
-import { STORAGE_KEYS } from "../constants/auth";
 
 const SOCKET_URL = import.meta.env.VITE_API_URL.replace("/api", "");
 
@@ -10,10 +9,8 @@ export function connectSocket() {
     return socket;
   }
 
-  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-
   socket = io(SOCKET_URL, {
-    auth: { token: token || undefined },
+    withCredentials: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
@@ -24,10 +21,7 @@ export function connectSocket() {
 }
 
 export function reconnectSocketWithAuth() {
-  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-
   if (socket) {
-    socket.auth = { token: token || undefined };
     socket.disconnect();
     socket.connect();
   } else {

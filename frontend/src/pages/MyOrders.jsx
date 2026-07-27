@@ -62,9 +62,6 @@ export default function MyOrders() {
 
   // Fetch current user id + split transactions into renting / lending
   const syncRentals = (uid) => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (!token) return;
-
     API.get("/rent/transactions")
       .then((res) => {
         if (!res.data || res.data.length === 0) return;
@@ -98,8 +95,6 @@ export default function MyOrders() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (!token) return;
     API.get("/auth/me")
       .then(res => {
         const uid = res.data?._id;

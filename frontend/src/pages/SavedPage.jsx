@@ -11,13 +11,15 @@ export default function SavedPage() {
 
   // Load saved items from localStorage on mount
   useEffect(() => {
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-      alert("Access Denied: Please log in to view bookmarked items.");
-      navigate("/login");
-      return;
-    }
-    const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-    setSavedItems(loaded);
+    API.get("/auth/me")
+      .then(() => {
+        const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+        setSavedItems(loaded);
+      })
+      .catch(() => {
+        alert("Access Denied: Please log in to view bookmarked items.");
+        navigate("/login");
+      });
   }, [navigate]);
 
   const handleRemove = (itemId) => {

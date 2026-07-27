@@ -140,9 +140,13 @@ function SingleChatbox({ chat, index, isFocused, onFocus, onMinimize, onClose })
   const chatContainerRef = useRef(null);
   const sendingRef = useRef(false);
 
-  const currentUserId = localStorage.getItem(STORAGE_KEYS.TOKEN)
-    ? JSON.parse(atob(localStorage.getItem(STORAGE_KEYS.TOKEN).split(".")[1])).id
-    : null;
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    API.get("/auth/me")
+      .then(res => setCurrentUserId(res.data._id))
+      .catch(() => setCurrentUserId(null));
+  }, []);
   const myProfilePic = localStorage.getItem("userProfilePic") || "";
   const myName = localStorage.getItem("user_name") || "Me";
 

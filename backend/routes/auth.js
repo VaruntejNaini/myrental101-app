@@ -14,6 +14,17 @@ const MAX_OTP_ATTEMPTS = 5;
 
 const createOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  maxAge: 24 * 60 * 60 * 1000, // 1 day
+};
+
+const setAuthCookie = (res, token) => {
+  res.cookie("token", token, cookieOptions);
+};
+
 const sanitizeUser = (user) => {
   const plain = user.toObject ? user.toObject() : { ...user };
   delete plain.password;
@@ -152,8 +163,9 @@ router.post("/login", async (req, res) => {
 
     // SUCCESS
 
+    setAuthCookie(res, token);
+
     res.json({
-      token,
       user: sanitizeUser(user),
     });
 
@@ -384,9 +396,10 @@ router.post("/verify-email-otp", async (req, res) => {
       }
     );
 
+    setAuthCookie(res, token);
+
     res.json({
       msg: "Email verified successfully",
-      token,
       user: sanitizeUser(user)
     });
 
@@ -535,14 +548,24 @@ router.post("/google", async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    setAuthCookie(res, token);
+
     res.json({
-      token,
       user: sanitizeUser(user),
     });
   } catch (err) {
     console.error("GOOGLE LOGIN ERROR:", err);
     res.status(500).json({ msg: "Google authentication failed" });
   }
+});
+
+// =========================
+// LOGOUT
+// =========================
+
+router.post("/logout", (req, res) => {
+  res.clearCookie("token", cookieOptions);
+  res.json({ msg: "Logged out successfully" });
 });
 
 // GET CURRENT USER PROFILE

@@ -1,47 +1,20 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import API from "../api";
-import { STORAGE_KEYS } from "../constants/auth";
-
-function decodeTokenRole(token) {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.role || null;
-  } catch {
-    return null;
-  }
-}
 
 export default function AdminRoute({ children }) {
-  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-  const [status, setStatus] = useState(token ? "loading" : "guest");
+  const [status, setStatus] = useState("loading");
 
   useEffect(() => {
-    if (!token) {
-      setStatus("guest");
-      return;
-    }
-
-    const jwtRole = decodeTokenRole(token);
-    if (jwtRole === "ADMIN") {
-      setStatus("admin");
-      return;
-    }
-    if (jwtRole && jwtRole !== "ADMIN") {
-      setStatus("user");
-      return;
-    }
-
+    let cancelled = false;
     API.get("/auth/me")
       .then((res) => {
-        if (res.data?.role === "ADMIN") {
-          setStatus("admin");
-        } else {
-          setStatus("user");
-        }
+        if (cancelled) return;
+        setStatus(res.data?.role === "ADMIN" ? "admin" : "user");
       })
-      .catch(() => setStatus("guest"));
-  }, [token]);
+      .catch(() => { if (!cancelled) setStatus("guest"); });
+    return () => { cancelled = true; };
+  }, []);
 
   if (status === "loading") {
     return (

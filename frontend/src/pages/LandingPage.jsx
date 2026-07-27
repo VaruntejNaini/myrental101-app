@@ -605,22 +605,19 @@ export default function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (activeToken) {
-      API.get("/auth/me")
-        .then(res => {
-          setCurrentUser(res.data);
-          if (res.data?.name) {
-            setUserName(res.data.name);
-            localStorage.setItem("user_name", res.data.name);
-          }
-          if (res.data?.profilePic) {
-            setProfilePic(res.data.profilePic);
-            localStorage.setItem("userProfilePic", res.data.profilePic);
-          }
-        })
-        .catch(err => console.error("Error loading user profile:", err));
-    }
+    API.get("/auth/me")
+      .then(res => {
+        setCurrentUser(res.data);
+        if (res.data?.name) {
+          setUserName(res.data.name);
+          localStorage.setItem("user_name", res.data.name);
+        }
+        if (res.data?.profilePic) {
+          setProfilePic(res.data.profilePic);
+          localStorage.setItem("userProfilePic", res.data.profilePic);
+        }
+      })
+      .catch(err => console.error("Error loading user profile:", err));
   }, []);
 
   const [userCoords, setUserCoords] = useState(null);
@@ -663,14 +660,14 @@ export default function Dashboard() {
   const [secondHandProducts, setSecondHandProducts] = useState([]);
 
   const syncMyProducts = () => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (token) {
-      API.get("/rent/products/me")
-        .then(res => setMyProducts(res.data))
-        .catch(err => console.error("Error fetching my products:", err));
-    } else {
-      setMyProducts([]);
-    }
+    API.get("/rent/products/me")
+      .then(res => setMyProducts(res.data))
+      .catch(err => {
+        if (err.response?.status === 403) {
+          setMyProducts([]);
+        }
+        console.error("Error fetching my products:", err);
+      });
   };
 
   const syncProducts = () => {
@@ -727,31 +724,29 @@ export default function Dashboard() {
   };
 
   const refreshNavbarAddress = () => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (token) {
-      API.get("/addresses")
-        .then(response => {
-          const defaultAddr = response.data.find(a => a.isDefault);
-          if (defaultAddr) {
-            const formatted = `${defaultAddr.firstName} ${defaultAddr.lastName} - ${defaultAddr.fullAddress}`;
-            setSavedAddress(formatted);
-            localStorage.setItem("saved_delivery_address", formatted);
-          } else if (response.data.length > 0) {
-            const formatted = `${response.data[0].firstName} ${response.data[0].lastName} - ${response.data[0].fullAddress}`;
-            setSavedAddress(formatted);
-            localStorage.setItem("saved_delivery_address", formatted);
-          } else {
-            setSavedAddress("Add Address");
-            localStorage.setItem("saved_delivery_address", "Add Address");
-          }
-        })
-        .catch(err => {
-          console.error("Failed to load address for navbar sync:", err);
-        });
-    } else {
-      setSavedAddress("Add Address");
-      localStorage.setItem("saved_delivery_address", "Add Address");
-    }
+    API.get("/addresses")
+      .then(response => {
+        const defaultAddr = response.data.find(a => a.isDefault);
+        if (defaultAddr) {
+          const formatted = `${defaultAddr.firstName} ${defaultAddr.lastName} - ${defaultAddr.fullAddress}`;
+          setSavedAddress(formatted);
+          localStorage.setItem("saved_delivery_address", formatted);
+        } else if (response.data.length > 0) {
+          const formatted = `${response.data[0].firstName} ${response.data[0].lastName} - ${response.data[0].fullAddress}`;
+          setSavedAddress(formatted);
+          localStorage.setItem("saved_delivery_address", formatted);
+        } else {
+          setSavedAddress("Add Address");
+          localStorage.setItem("saved_delivery_address", "Add Address");
+        }
+      })
+      .catch(err => {
+        if (err.response?.status === 403) {
+          setSavedAddress("Add Address");
+          localStorage.setItem("saved_delivery_address", "Add Address");
+        }
+        console.error("Failed to load address for navbar sync:", err);
+      });
   };
 
   useAddressSync(refreshNavbarAddress);
@@ -808,32 +803,23 @@ export default function Dashboard() {
 
   // Load Bookmarks on Mount and hook sync updates
   useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-      const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-      setBookmarkedIds(loaded.map(x => x.id));
-      // Sync with backend bookmarks
-      API.get("/rent/products/bookmarks/ids")
-        .then(res => {
-          if (res.data && Array.isArray(res.data)) {
-            setBookmarkedIds(res.data);
-            const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
-            const synced = existing.filter(x => res.data.includes(x.id));
-            localStorage.setItem("bookmarked_items", JSON.stringify(synced));
-          }
-        })
-        .catch(err => console.error("Error fetching bookmarks from db:", err));
-    } else {
-      setBookmarkedIds([]);
-    }
+    const loaded = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+    setBookmarkedIds(loaded.map(x => x.id));
+    // Sync with backend bookmarks
+    API.get("/rent/products/bookmarks/ids")
+      .then(res => {
+        if (res.data && Array.isArray(res.data)) {
+          setBookmarkedIds(res.data);
+          const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
+          const synced = existing.filter(x => res.data.includes(x.id));
+          localStorage.setItem("bookmarked_items", JSON.stringify(synced));
+        }
+      })
+      .catch(err => console.error("Error fetching bookmarks from db:", err));
   }, []);
 
   const handleBookmarkToggle = async (item) => {
     const itemId = item.id || item._id;
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-      alert("Authentication Required: Please log in to bookmark products.");
-      return;
-    }
-    
     try {
       const res = await API.post(`/rent/products/${itemId}/bookmark`);
       const isBookmarked = res.data.bookmarked;
@@ -1047,16 +1033,27 @@ export default function Dashboard() {
   }, [messages, isTyping]);
 
   // Auth checking
-  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-  const isLoggedIn = !!token;
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+  useEffect(() => {
+    let cancelled = false;
+    API.get("/auth/me")
+      .then(() => { if (!cancelled) setIsLoggedIn(true); })
+      .catch(() => { if (!cancelled) setIsLoggedIn(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await API.post("/auth/logout");
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
     localStorage.removeItem("bookmarked_items");
-    window.dispatchEvent(new Event("authStateChanged"));
+    setIsLoggedIn(false);
     setSidePanelOpen(false);
     setMyProducts([]);
-    triggerToast("Logged out successfully. Authentication wiped!");
+    triggerToast("Logged out successfully!");
   };
 
   // Mock card lists corresponding to 4 Rows

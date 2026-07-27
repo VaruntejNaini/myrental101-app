@@ -25,36 +25,33 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (activeToken) {
-      API.get("/auth/me")
-        .then(res => {
-          if (res.data?.name) {
-            setUserName(res.data.name);
-            localStorage.setItem("user_name", res.data.name);
-          }
-          if (res.data?.email) {
-            setUserEmail(res.data.email);
-          }
-          if (res.data?.profilePic) {
-            setProfilePic(res.data.profilePic);
-            localStorage.setItem("userProfilePic", res.data.profilePic);
-          }
-          if (res.data?.reputationScore !== undefined) {
-            setReputationScore(res.data.reputationScore);
-          }
-          if (Array.isArray(res.data?.reputationHistory)) {
-            setReputationHistory(res.data.reputationHistory);
-          }
-          if (res.data?.role) {
-            setUserRole(res.data.role);
-          }
-          if (res.data?._id) {
-            setCurrentUserId(res.data._id);
-          }
-        })
-        .catch(err => console.error("Error loading profile:", err));
-    }
+    API.get("/auth/me")
+      .then(res => {
+        if (res.data?.name) {
+          setUserName(res.data.name);
+          localStorage.setItem("user_name", res.data.name);
+        }
+        if (res.data?.email) {
+          setUserEmail(res.data.email);
+        }
+        if (res.data?.profilePic) {
+          setProfilePic(res.data.profilePic);
+          localStorage.setItem("userProfilePic", res.data.profilePic);
+        }
+        if (res.data?.reputationScore !== undefined) {
+          setReputationScore(res.data.reputationScore);
+        }
+        if (Array.isArray(res.data?.reputationHistory)) {
+          setReputationHistory(res.data.reputationHistory);
+        }
+        if (res.data?.role) {
+          setUserRole(res.data.role);
+        }
+        if (res.data?._id) {
+          setCurrentUserId(res.data._id);
+        }
+      })
+      .catch(err => console.error("Error loading profile:", err));
   }, []);
 
   const [expandedCard, setExpandedCard] = useState(null);
@@ -67,10 +64,8 @@ export default function Profile() {
   const [txLoading, setTxLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (!token) { setTxLoading(false); return; }
-    let uid = null;
-    try { uid = JSON.parse(atob(token.split(".")[1])).id; } catch {}
+    if (!currentUserId) { setTxLoading(false); return; }
+    const uid = currentUserId;
     API.get("/rent/transactions")
       .then(res => {
         if (!res.data?.length) { setTxLoading(false); return; }
@@ -92,7 +87,7 @@ export default function Profile() {
         setTxLoading(false);
       })
       .catch(() => setTxLoading(false));
-  }, []);
+  }, [currentUserId]);
 
   const calcProgress = (s, e) => {
     const start = new Date(s).getTime(), end = new Date(e).getTime(), now = Date.now();

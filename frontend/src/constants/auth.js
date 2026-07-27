@@ -12,7 +12,6 @@ export const AUTH_MODES = Object.freeze({
  * LocalStorage keys to avoid typos when storing tokens or emails
  */
 export const STORAGE_KEYS = Object.freeze({
-  TOKEN: "token",
   PENDING_EMAIL: "pendingEmail",
 });
 

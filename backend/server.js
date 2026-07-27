@@ -6,6 +6,7 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
 import { validateEmailConfig } from "./config/email.js";
 // ✅ Rent & Wish Routes
 import rentRoutes from "./routes/rent.js";
@@ -57,6 +58,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Cookie parser
+app.use(cookieParser());
 
 // JSON parser
 app.use(express.json({ limit: "50mb" }));

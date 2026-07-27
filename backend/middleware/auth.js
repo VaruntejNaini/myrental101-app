@@ -3,9 +3,8 @@ import User from "../models/User.js";
 import { logFailure } from "../services/auditService.js";
 
 export const verifyToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  //console.log('>>> AUTH: verifyToken invoked. Authorization header present:', !!authHeader);
+  const token = req.cookies?.token;
+  //console.log('>>> AUTH: verifyToken invoked. Cookie token present:', !!token);
 
   if (!token) {
     console.log('>>> AUTH: No token present - blocking request.');

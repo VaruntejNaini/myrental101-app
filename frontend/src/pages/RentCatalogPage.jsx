@@ -350,7 +350,9 @@ export default function RentCatalogPage() {
   });
   const handleRentClick = async (productId, price, securityDeposit) => {
     // Auth guard
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+    try {
+      await API.get("/auth/me");
+    } catch {
       navigate("/register");
       return;
     }
@@ -371,7 +373,9 @@ export default function RentCatalogPage() {
   };
   const handleNegotiationClick = async (productId, currentPrice, title) => {
     // Auth guard
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+    try {
+      await API.get("/auth/me");
+    } catch {
       navigate("/register");
       return;
     }
@@ -532,42 +536,37 @@ export default function RentCatalogPage() {
       setCoordsLoading(false);
     }
 
-    const activeToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (activeToken) {
-      API.get("/auth/me")
-        .then((userRes) => {
-          const user = userRes.data;
-          setCurrentUser(user);
-          return API.get("/rent/transactions").then((txRes) => {
-            const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
-            const negotiationsMap = {};
-            txRes.data.forEach((t) => {
-              const borrowerId = t.borrower?._id || t.borrower;
-              const prodId = t.product?._id || t.product;
-              if (activeStates.includes(t.status) && prodId && borrowerId &&
-                  String(borrowerId) === String(user._id)) {
-                negotiationsMap[String(prodId)] = t.status;
-              }
-            });
-            setUserNegotiations(negotiationsMap);
+    API.get("/auth/me")
+      .then((userRes) => {
+        const user = userRes.data;
+        setCurrentUser(user);
+        return API.get("/rent/transactions").then((txRes) => {
+          const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
+          const negotiationsMap = {};
+          txRes.data.forEach((t) => {
+            const borrowerId = t.borrower?._id || t.borrower;
+            const prodId = t.product?._id || t.product;
+            if (activeStates.includes(t.status) && prodId && borrowerId &&
+                String(borrowerId) === String(user._id)) {
+              negotiationsMap[String(prodId)] = t.status;
+            }
           });
-        })
-        .catch((err) => console.error("Error synchronizing user session:", err));
-    }
+          setUserNegotiations(negotiationsMap);
+        });
+      })
+      .catch((err) => console.error("Error synchronizing user session:", err));
 
     const existing = JSON.parse(localStorage.getItem("bookmarked_items") || "[]");
     setBookmarkedIds(existing.map(x => x.id));
-    if (activeToken) {
-      API.get("/rent/products/bookmarks/ids")
-        .then(res => {
-          if (res.data && Array.isArray(res.data)) {
-            setBookmarkedIds(res.data);
-            const synced = existing.filter(x => res.data.includes(x.id));
-            localStorage.setItem("bookmarked_items", JSON.stringify(synced));
-          }
-        })
-        .catch(err => console.error("Error fetching bookmarks from db in RentCatalogPage:", err));
-    }
+    API.get("/rent/products/bookmarks/ids")
+      .then(res => {
+        if (res.data && Array.isArray(res.data)) {
+          setBookmarkedIds(res.data);
+          const synced = existing.filter(x => res.data.includes(x.id));
+          localStorage.setItem("bookmarked_items", JSON.stringify(synced));
+        }
+      })
+      .catch(err => console.error("Error fetching bookmarks from db in RentCatalogPage:", err));
   }, []);
 
   // Server-Side Data Fetch with AbortController for cancellation
@@ -641,8 +640,10 @@ export default function RentCatalogPage() {
 
   const handleBookmarkToggle = async (item) => {
     const itemId = item._id;
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-      alert("Authentication Required: Please log in to bookmark products.");
+    try {
+      await API.get("/auth/me");
+    } catch {
+      navigate("/register");
       return;
     }
 

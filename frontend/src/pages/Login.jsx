@@ -77,7 +77,6 @@ function Login() {
 
       const res = await API.post(API_ROUTES.LOGIN, form);
 
-      localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
       if (res.data.user?.name) {
         localStorage.setItem("user_name", res.data.user.name);
       }
@@ -103,7 +102,6 @@ function Login() {
         credential: credentialResponse.credential,
       });
 
-      localStorage.setItem(STORAGE_KEYS.TOKEN, res.data.token);
       if (res.data.user?.name) {
         localStorage.setItem("user_name", res.data.user.name);
       }

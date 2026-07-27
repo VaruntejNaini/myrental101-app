@@ -101,33 +101,31 @@ export default function ProductDetailPage() {
   }, [product, id]);
 
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (token) {
-      API.get("/auth/me")
-        .then((userRes) => {
-          const user = userRes.data;
-          setCurrentUser(user);
+    API.get("/auth/me")
+      .then((userRes) => {
+        const user = userRes.data;
+        setCurrentUser(user);
 
-          return API.get("/rent/transactions").then((txRes) => {
-            const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
-            const activeTx = txRes.data.find(
-              (t) =>
-                activeStates.includes(t.status) &&
-                String(t.product?._id || t.product) === String(id) &&
-                String(t.borrower?._id || t.borrower) === String(user._id)
-            );
-            if (activeTx) {
-              setActiveNegotiationStatus(activeTx.status);
-            } else {
-              setActiveNegotiationStatus(null);
-            }
-          });
-        })
-        .catch((err) => console.error("Error fetching transactions in detail page:", err));
-    } else {
-      setCurrentUser(null);
-      setActiveNegotiationStatus(null);
-    }
+        return API.get("/rent/transactions").then((txRes) => {
+          const activeStates = ["PENDING_NEGOTIATION", "NEGOTIATING", "ACCEPTED", "AWAITING_PAYMENT", "RESERVED"];
+          const activeTx = txRes.data.find(
+            (t) =>
+              activeStates.includes(t.status) &&
+              String(t.product?._id || t.product) === String(id) &&
+              String(t.borrower?._id || t.borrower) === String(user._id)
+          );
+          if (activeTx) {
+            setActiveNegotiationStatus(activeTx.status);
+          } else {
+            setActiveNegotiationStatus(null);
+          }
+        });
+      })
+      .catch((err) => {
+        console.error("Error fetching transactions in detail page:", err);
+        setCurrentUser(null);
+        setActiveNegotiationStatus(null);
+      });
   }, [id]);
 
   useEffect(() => {
@@ -173,13 +171,15 @@ export default function ProductDetailPage() {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
- const handleNegotiateClick = async () => {
-  if (!product) return;
-  // Auth guard
-  if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
-    navigate("/register");
-    return;
-  }
+  const handleNegotiateClick = async () => {
+    if (!product) return;
+    // Auth guard
+    try {
+      await API.get("/auth/me");
+    } catch {
+      navigate("/register");
+      return;
+    }
   
   if (activeNegotiationStatus !== null) {
     triggerToast("You already have an active negotiation for this product.");
@@ -250,7 +250,9 @@ export default function ProductDetailPage() {
   const handleAction = async () => {
     if (!product) return;
     // Auth guard
-    if (!localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+    try {
+      await API.get("/auth/me");
+    } catch {
       navigate("/register");
       return;
     }

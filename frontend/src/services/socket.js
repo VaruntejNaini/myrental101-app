@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
 import { STORAGE_KEYS } from "../constants/auth";
 
-const SOCKET_URL = "";
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 let socket = null;
 
@@ -17,6 +17,7 @@ export function connectSocket() {
 
   console.log(`[Socket] connectSocket called | env=${env} | SOCKET_URL="${SOCKET_URL}"`);
 
+  console.log("SOCKET_URL =", SOCKET_URL);
   socket = io(SOCKET_URL, {
     auth: { token: token || undefined },
     reconnection: true,

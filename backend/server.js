@@ -28,284 +28,167 @@ import http from "http";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Startup Orchestrator — guarantees NO requests are served until MongoDB is up
+// ──────────────────────────────────────────────────────────────────────────────
+async function start() {
+  // Fail fast if AWS SES / email config is missing
+  validateEmailConfig();
 
-// Validate email configuration on startup (fail fast if missing AWS SES config)
-validateEmailConfig();
-
-const app = express();
-app.set("trust proxy", 1);
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const CLIENT_DIST = path.resolve(__dirname, "public");
-
-// ✅ Middleware
-
-// CORS - Allow Vercel frontend and localhost for development
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://rentit101.vercel.app",
-  "https://rentit-frontend.vercel.app",
-  "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
-  "https://rentit-frontend-5dm5kv86e-varuncode7-5379s-projects.vercel.app" // Added the missing URL
-];
-
-// 1. Remove the production check so CORS applies to both environments
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
-      if (!origin) return callback(null, true);
-
-      // Check if the origin matches our list or matches Vercel's preview URL pattern
-      if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
-
-// JSON parser
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-// ✅ Rate Limiter
-const aiLimiter = rateLimit({
-  windowMs: 30 * 1000, // 1 minute
-  max: 10,
-  message: {
-    reply: "Too many AI requests. Please wait a minute.",
-  },
-});
-
-app.use("/api/ai", aiLimiter);
-
-// ✅ Gemini AI Setup
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// ✅ MongoDB Connection
-
-mongoose
-  .connect(process.env.MONGO_URI, {
+  // ── MongoDB Connection ────────────────────────────────────────────────────
+  console.log("[startup] before mongoose.connect");
+  await mongoose.connect(process.env.MONGO_URI, {
     family: 4,
-  })
-  .then(() => {
-    console.log("MongoDB Connected ✅");
-    console.log("Ready State:", mongoose.connection.readyState);
-  })
-  .catch((err) => {
-    console.error("MongoDB Error ❌");
-    console.error(err.message);
   });
 
-// ✅ Routes
-
-// Health Route
-app.get("/api/health", (req, res) => {
-  res.send("RentIt API is running 🚀");
-});
-
-// Auth Routes
-app.use("/api/auth", authRoutes);
-
-// Address Routes
-app.use("/api/addresses", addressRoutes);
-
-
-
-app.use("/api/rent", rentRoutes);
-app.use("/api/wishes", wishesRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/auctions", auctionRoutes);
-
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(CLIENT_DIST));
-}
-
-// Clean up Mock Database listings on startup (deletes mock IDs and preserves user listings)
-const cleanMockDatabase = async () => {
-  try {
-    await Product.deleteMany({
-      _id: {
-        $in: [
-          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a1"),
-          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a2"),
-          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a3"),
-          new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8a4")
-        ]
-      }
-    });
-    await Wish.deleteMany({
-      creator: new mongoose.Types.ObjectId("60d5ecb8b5c9c93d98e8a8b1")
-    });
-    console.log("Mock data cleaned and database is ready! ✅");
-  } catch (err) {
-    console.error("Error cleaning database:", err);
+  // Confirm connection is truly ready for I/O
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error(`MongoDB not connected. readyState=${mongoose.connection.readyState}`);
   }
-};
 
-// One-time startup migration to link old/legacy notifications to their active transactions
-const migrateOldNotifications = async () => {
-  try {
-    const notifications = await Notification.find({ transactionId: null });
-    let count = 0;
-    for (const notif of notifications) {
-      const txMatch = notif.link ? notif.link.match(/tx=([^&#=]*)/) : null;
-      let txId = txMatch ? txMatch[1] : null;
+  console.log("[startup] after mongoose.connect");
+  console.log("MongoDB Connected ✅");
+  console.log("Ready State:", mongoose.connection.readyState);
 
-      if (!txId) {
-        // Find any active transaction involving borrower & owner
-        const tx = await Transaction.findOne({
-          $or: [
-            { borrower: notif.recipient, owner: notif.sender },
-            { borrower: notif.sender, owner: notif.recipient }
-          ]
-        }).sort({ createdAt: -1 });
-        if (tx) {
-          txId = tx._id;
+  // ── One-time startup migrations / cleanup ──────────────────────────────────
+  const migrateOldNotifications = async () => {
+    try {
+      const notifications = await Notification.find({ transactionId: null });
+      let count = 0;
+      for (const notif of notifications) {
+        const txMatch = notif.link ? notif.link.match(/tx=([^&#=]*)/) : null;
+        let txId = txMatch ? txMatch[1] : null;
+
+        if (!txId) {
+          const tx = await Transaction.findOne({
+            $or: [
+              { borrower: notif.recipient, owner: notif.sender },
+              { borrower: notif.sender, owner: notif.recipient }
+            ]
+          }).sort({ createdAt: -1 });
+          if (tx) txId = tx._id;
+        }
+
+        if (txId) {
+          notif.transactionId = txId;
+          await notif.save();
+          count++;
         }
       }
-
-      if (txId) {
-        notif.transactionId = txId;
-        await notif.save();
-        count++;
-      }
+      console.log(`Migrated ${count} legacy notifications to active transactions! 🚀`);
+    } catch (err) {
+      console.error("Error migrating notifications:", err);
+      throw err;
     }
-    console.log(`Migrated ${count} legacy notifications to active transactions! 🚀`);
-  } catch (err) {
-    console.error("Error migrating notifications:", err);
-  }
-};
+  };
 
-mongoose.connection.once("open", async () => {
   await migrateOldNotifications();
   await initAuctionScheduler();
-});
 
+  // ── Express App Setup ──────────────────────────────────────────────────────
+  const app = express();
+  app.set("trust proxy", 1);
 
-// ✅ AI Chat Route
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const CLIENT_DIST = path.resolve(__dirname, "public");
 
-app.post("/api/ai/chat", async (req, res) => {
-  try {
-    const { message, context } = req.body;
+  // CORS
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "https://rentit101.vercel.app",
+    "https://rentit-frontend.vercel.app",
+    "https://rentit-frontend-5vs4okgo3-varuncode7-5379s-projects.vercel.app",
+    "https://rentit-frontend-5dm5kv86e-varuncode7-5379s-projects.vercel.app"
+  ];
 
-    // Validation
-    if (!message || message.trim() === "") {
-      return res.status(400).json({
-        reply: "Message is required.",
-      });
-    }
+  app.use(
+    cors({
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+          return callback(null, true);
+        }
+        return callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+    })
+  );
 
-    console.log(`AI Request: ${message}`);
+  // Body parsing
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-    // Gemini Model
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+  // Rate limiter for AI endpoints
+  const aiLimiter = rateLimit({
+    windowMs: 30 * 1000,
+    max: 10,
+    message: {
+      reply: "Too many AI requests. Please wait a minute.",
+    },
+  });
 
-    });
+  app.use("/api/ai", aiLimiter);
 
-    // System Prompt
-    const systemInstruction = `
-You are RentBot, the official AI assistant for the RentIt platform.
+  // Gemini AI client (safe to init anytime after dotenv loaded)
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  app.set('genAI', genAI);
 
-Platform Features: 
-1. Users can rent items.
-2. Users can post items for rent.
-3. Secure escrow payments are used.
+  // ── Routes ─────────────────────────────────────────────────────────────────
+  app.get("/api/health", (req, res) => {
+    res.send("RentIt API is running 🚀");
+  });
 
-Behavior Rules:
-- Be helpful and concise.
-- Keep answers beginner-friendly.
-- Answer only platform-related questions.
+  app.use("/api/auth", authRoutes);
+  app.use("/api/addresses", addressRoutes);
+  app.use("/api/rent", rentRoutes);
+  app.use("/api/wishes", wishesRoutes);
+  app.use("/api/admin", adminRoutes);
+  app.use("/api/auctions", auctionRoutes);
 
-User Context:
-${context || "User is browsing dashboard"}
-`;
+  if (process.env.NODE_ENV === "production") {
+    app.use(express.static(CLIENT_DIST));
+  }
 
-    // Final Prompt
-    const prompt = `
-${systemInstruction}
-
-User Question:
-${message}
-`;
-
-    // Gemini Request
-
-
-    try {
-      const result = await model.generateContent(prompt);
-
-      const response = await result.response;
-
-      const text = response.text();
-
-      if (!text) {
-        throw new Error("Empty AI response");
+  // Production SPA fallback
+  if (process.env.NODE_ENV === "production") {
+    app.use((req, res, next) => {
+      if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
+        res.sendFile(path.join(CLIENT_DIST, "index.html"));
+      } else {
+        res.status(404).send("Not Found");
       }
-
-      return res.status(200).json({
-        reply: text,
-      });
-
-    } catch (aiError) {
-      console.error("Gemini API Error ❌");
-      console.error(aiError.message);
-
-      // Graceful fallback
-      return res.status(200).json({
-        reply:
-          "RentBot is temporarily unavailable due to API limits. Please try again later.",
-      });
-    }
-
-  } catch (error) {
-    console.error("Backend Server Error ❌");
-    console.error(error.stack);
-
-    return res.status(500).json({
-      reply: "Internal server error.",
     });
   }
-});
 
-
-if (process.env.NODE_ENV === "production") {
-  app.use((req, res, next) => {
-    if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
-      res.sendFile(path.join(CLIENT_DIST, "index.html"));
-    } else {
-      res.status(404).send("Not Found");
+  // Global error handler
+  app.use((err, req, res, next) => {
+    console.error('GLOBAL ERROR:', err && (err.stack || err.message));
+    if (!res.headersSent) {
+      if (err && (err.name === 'MulterError' || err.message === 'Only image files are allowed!')) {
+        return res.status(400).json({ msg: err.message });
+      }
+      return res.status(500).json({ msg: err && err.message ? err.message : 'Internal server error' });
     }
+    next(err);
+  });
+
+  // ── HTTP + Socket.IO (only after DB is ready) ──────────────────────────────
+  const PORT = process.env.PORT || 5000;
+  const server = http.createServer(app);
+
+  const io = initAuctionSockets(server);
+  registerChatSocketHandlers(io);
+  app.set('io', io);
+
+  server.listen(PORT, () => {
+    console.log("[startup] after server.listen");
+    console.log(`Server running on port ${PORT} 🚀`);
   });
 }
 
-// --- global JSON error handler for uploads and other errors
-app.use((err, req, res, next) => {
-  console.error('GLOBAL ERROR:', err && (err.stack || err.message));
-  if (!res.headersSent) {
-    // Handle Multer errors and explicit file filter errors
-    if (err && (err.name === 'MulterError' || err.message === 'Only image files are allowed!')) {
-      return res.status(400).json({ msg: err.message });
-    }
-    // Generic error
-    return res.status(500).json({ msg: err && err.message ? err.message : 'Internal server error' });
-  }
-  next(err);
-});
-
-const PORT = process.env.PORT || 5000;
-
-const server = http.createServer(app);
-const io = initAuctionSockets(server);
-registerChatSocketHandlers(io);
-app.set('io', io);
-
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} 🚀`);
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+start().catch((error) => {
+  console.error("FATAL: Startup failed — server will not listen.", error);
+  process.exitCode = 1;
 });

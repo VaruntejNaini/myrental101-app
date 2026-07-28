@@ -28,6 +28,8 @@ import http from "http";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+let app;
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Startup Orchestrator — guarantees NO requests are served until MongoDB is up
 // ──────────────────────────────────────────────────────────────────────────────
@@ -86,7 +88,7 @@ async function start() {
   await initAuctionScheduler();
 
   // ── Express App Setup ──────────────────────────────────────────────────────
-  const app = express();
+  app = express();
   app.set("trust proxy", 1);
 
   const __filename = fileURLToPath(import.meta.url);
@@ -181,14 +183,20 @@ async function start() {
   registerChatSocketHandlers(io);
   app.set('io', io);
 
-  server.listen(PORT, () => {
-    console.log("[startup] after server.listen");
-    console.log(`Server running on port ${PORT} 🚀`);
-  });
+  if (!process.env.VERCEL) {
+    server.listen(PORT, () => {
+      console.log("[startup] after server.listen");
+      console.log(`Server running on port ${PORT} 🚀`);
+    });
+  }
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
-start().catch((error) => {
+try {
+  await start();
+} catch (error) {
   console.error("FATAL: Startup failed — server will not listen.", error);
   process.exitCode = 1;
-});
+}
+
+export default app;
